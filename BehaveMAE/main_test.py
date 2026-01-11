@@ -41,100 +41,46 @@ from util.pos_embed import interpolate_pos_embed
 
 def get_args_parser():
     parser = argparse.ArgumentParser("hBehaveMAE embeddings extraction", add_help=False)
-    parser.add_argument(
-        "--dataset",
-        default="shot7m2",
-        type=str,
-        help="Type of dataset [mabe_mice, shot7m2, hbabel]",
-    )
+    parser.add_argument("--dataset", default="shot7m2", type=str,
+        help="Type of dataset [mabe_mice, shot7m2, hbabel]",)
     parser.add_argument("--joints3d_procrustes", default=True, type=str2bool)
 
-    parser.add_argument(
-        "--embedsum",
-        default=False,
-        type=str2bool,
-        help="single embeddings will be summed up instead of concatenated",
-    )
+    parser.add_argument("--embedsum", default=False, type=str2bool,
+        help="single embeddings will be summed up instead of concatenated",)
 
-    parser.add_argument(
-        "--fast_inference",
-        default=False,
-        type=str2bool,
-        help="if set, we do not perform any embedding averaging, but only take the middle embedding",
-    )
+    parser.add_argument("--fast_inference", default=False, type=str2bool,
+        help="if set, we do not perform any embedding averaging, but only take the middle embedding",)
 
-    parser.add_argument(
-        "--combine_embeddings",
-        default=False,
-        type=str2bool,
-        help="combine embeddings from different hierarchical levels and save them",
-    )
-    parser.add_argument(
-        "--fusion_head",
-        default=False,
-        type=str2bool,
-        help="combined embeddings are created by (trained) fusion head",
-    )
+    parser.add_argument("--combine_embeddings", default=False, type=str2bool,
+        help="combine embeddings from different hierarchical levels and save them",)
+    parser.add_argument("--fusion_head", default=False, type=str2bool,
+        help="combined embeddings are created by (trained) fusion head",)
 
-    parser.add_argument(
-        "--batch_size",
-        default=64,
-        type=int,
-        help="Batch size per GPU (effective batch size is batch_size * accum_iter * # gpus",
-    )
+    parser.add_argument("--batch_size", default=64, type=int,
+        help="Batch size per GPU (effective batch size is batch_size * accum_iter * # gpus",)
     # Model parameters
-    parser.add_argument(
-        "--model",
-        default="gen_hiera",
-        type=str,
-        metavar="MODEL",
-        help="Name of model to train",
-    )
+    parser.add_argument("--model", default="gen_hiera", type=str, metavar="MODEL",
+        help="Name of model to train", )
 
     # test a non-hierarchical model ("BehaveMAE")
     parser.add_argument("--non_hierarchical", default=False, type=str2bool)
 
-    parser.add_argument(
-        "--path_to_data_dir",
-        default="",
-        help="path where to load data from",
-    )
-    parser.add_argument(
-        "--output_dir",
-        default="./output_dir",
-        help="path where to save",
-    )
-    parser.add_argument(
-        "--log_dir",
-        default="",
-        help="path where to tensorboard log",
-    )
-    parser.add_argument(
-        "--device", default="cuda", help="device to use for training / testing"
-    )
-    parser.add_argument(
-        "--dist_eval",
-        action="store_true",
-        default=False,
-        help="Enabling distributed evaluation (recommended during training for faster monitor",
-    )
+    parser.add_argument( "--path_to_data_dir", default="", help="path where to load data from", )
+    parser.add_argument("--output_dir", default="./output_dir", help="path where to save",)
+    parser.add_argument("--log_dir", default="", help="path where to tensorboard log",)
+    parser.add_argument("--device", default="cuda", help="device to use for training / testing")
+    parser.add_argument("--dist_eval", action="store_true", default=False,
+        help="Enabling distributed evaluation (recommended during training for faster monitor",)
     parser.add_argument("--num_workers", default=8, type=int)
-    parser.add_argument(
-        "--pin_mem",
-        action="store_true",
-        help="Pin CPU memory in DataLoader for more efficient (sometimes) transfer to GPU.",
-    )
+    parser.add_argument("--pin_mem", action="store_true",
+        help="Pin CPU memory in DataLoader for more efficient (sometimes) transfer to GPU.",)
     parser.set_defaults(pin_mem=True)
 
     # distributed training parameters
-    parser.add_argument(
-        "--world_size", default=1, type=int, help="number of distributed processes"
-    )
+    parser.add_argument("--world_size", default=1, type=int, help="number of distributed processes")
     parser.add_argument("--local_rank", default=-1, type=int)
     parser.add_argument("--dist_on_itp", action="store_true")
-    parser.add_argument(
-        "--dist_url", default="env://", help="url used to set up distributed training"
-    )
+    parser.add_argument("--dist_url", default="env://", help="url used to set up distributed training")
 
     parser.add_argument("--num_frames", default=400, type=int)
     parser.add_argument("--sampling_rate", default=1, type=int)
@@ -143,12 +89,8 @@ def get_args_parser():
     # hBehaveMAE specific parameters
     parser.add_argument("--input_size", default=(600, 3, 24), nargs="+", type=int)
     parser.add_argument("--stages", default=(2, 3, 4), nargs="+", type=int)
-    parser.add_argument(
-        "--q_strides", default=[(1, 1, 3), (1, 1, 4), (1, 3, 1)], type=parse_tuples
-    )
-    parser.add_argument(
-        "--mask_unit_attn", default=(True, False, False), nargs="+", type=str2bool
-    )
+    parser.add_argument("--q_strides", default=[(1, 1, 3), (1, 1, 4), (1, 3, 1)], type=parse_tuples)
+    parser.add_argument("--mask_unit_attn", default=(True, False, False), nargs="+", type=str2bool)
     parser.add_argument("--patch_kernel", default=(4, 1, 2), nargs="+", type=int)
     parser.add_argument("--init_embed_dim", default=48, type=int)
     parser.add_argument("--init_num_heads", default=2, type=int)
@@ -160,10 +102,7 @@ def get_args_parser():
     parser.add_argument("--no_qkv_bias", action="store_true")
     parser.add_argument("--sep_pos_embed", action="store_true")
     parser.set_defaults(sep_pos_embed=True)
-    parser.add_argument(
-        "--fp32",
-        action="store_true",
-    )
+    parser.add_argument("--fp32", action="store_true",)
     parser.set_defaults(fp32=True)
     return parser
 
@@ -172,10 +111,7 @@ def load_model(args):
 
     # Device configurations
     device = torch.device(args.device)
-
-    model = models_defs.__dict__[args.model](
-        **vars(args),
-    )
+    model = models_defs.__dict__[args.model](**vars(args),)
     # load last model checkpoint
     chkpt = misc.get_last_checkpoint(args)
 
@@ -199,10 +135,8 @@ def load_model(args):
 
     model_without_ddp = model
     n_parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)
-
     print("Model = %s" % str(model_without_ddp))
     print("number of params (M): %.2f" % (n_parameters / 1.0e6))
-
     model = model.eval()
 
     return model, device
@@ -214,12 +148,8 @@ def load_fusion_head(args, model):
 
     multi_scale_fusion_heads = nn.ModuleList()
     curr_mu_size = model.mask_unit_size
-    for ix, i in enumerate(
-        model.stage_ends[: model.q_pool]
-    ):  # resolution constant after q_pool
-        overall_q_strides = list(
-            map(lambda elements: reduce(mul, elements), zip(*model.q_strides))
-        )
+    for ix, i in enumerate(model.stage_ends[: model.q_pool]):  # resolution constant after q_pool
+        overall_q_strides = list(map(lambda elements: reduce(mul, elements), zip(*model.q_strides)))
         mask_unit_spatial_shape = [
             i // s for i, s in zip(model.mask_unit_size, overall_q_strides)
         ]
@@ -249,16 +179,13 @@ def load_fusion_head(args, model):
         for k, v in checkpoint_model.items()
         if k.startswith("multi_scale_fusion_heads")
     }
-
     # load pre-trained model
     msg = multi_scale_fusion_heads.load_state_dict(checkpoint_model, strict=False)
     print(msg)
     print("Fusion Head = %s" % str(multi_scale_fusion_heads))
 
     # add also normalization layer
-    multi_scale_fusion_heads.append(
-        nn.LayerNorm(model.projections[-1].out_features, eps=1e-6)
-    )
+    multi_scale_fusion_heads.append(nn.LayerNorm(model.projections[-1].out_features, eps=1e-6))
 
     return multi_scale_fusion_heads.to(device).eval()
 
@@ -281,9 +208,7 @@ def extract_hierarchical_embeddings(args):
         nr_test_frames = 2720 * 1800
     elif args.dataset == "hbabel":
         submission_clips = {"sequences": dict()}
-        val = joblib.load(
-            os.path.join(args.path_to_data_dir, "babel-smplh-30fps-male/val.pth.tar")
-        )
+        val = joblib.load(os.path.join(args.path_to_data_dir, "babel-smplh-30fps-male/val.pth.tar"))
         if args.joints3d_procrustes:
             val = joblib.load(
                 os.path.join(
@@ -319,14 +244,10 @@ def extract_hierarchical_embeddings(args):
         fill_holes = mice.MABeMouseDataset.fill_holes
         num_animals = 3
         max_frame_emb_size = 128
-        nr_test_frames = (
-            mice.MABeMouseDataset.DEFAULT_NUM_TESTING_POINTS
-            * mice.MABeMouseDataset.SAMPLE_LEN
-        )
+        nr_test_frames = (mice.MABeMouseDataset.DEFAULT_NUM_TESTING_POINTS
+            * mice.MABeMouseDataset.SAMPLE_LEN)
     else:
-        raise NotImplementedError(
-            f"Your specified dataset -- {args.dataset} -- is not supported..."
-        )
+        raise NotImplementedError(f"Your specified dataset -- {args.dataset} -- is not supported...")
 
     frame_number_map = {}
     # create a temporary file to hold the dictionary
@@ -372,9 +293,7 @@ def extract_hierarchical_embeddings(args):
         sliding_window = 1
     start_idx = 0
 
-    loop = (
-        (name, sequence) for name, sequence in submission_clips["sequences"].items()
-    )
+    loop = ((name, sequence) for name, sequence in submission_clips["sequences"].items())
 
     for name, sequence in tqdm(loop):
         # Preprocess sequences
@@ -492,16 +411,13 @@ def extract_hierarchical_embeddings(args):
                     )
 
             else:
-
                 if args.embedsum:
                     emb_size = embeddings[lv].shape[-1]
                 else:
                     emb_size = math.prod(embeddings[lv].shape[2:])
 
                 # for temporal hierarchy!
-                embeddings[lv] = embeddings[lv].view(
-                    embeddings[lv].shape[0], -1, *embeddings[lv].shape[2:]
-                )
+                embeddings[lv] = embeddings[lv].view(embeddings[lv].shape[0], -1, *embeddings[lv].shape[2:])
 
                 result_embeds = torch.zeros(
                     (full_seq_len + 2 * (sub_seq_length - sliding_window), emb_size),
@@ -511,9 +427,7 @@ def extract_hierarchical_embeddings(args):
             if args.embedsum:
                 # add single animal embeddings up to one embedding
                 embs = embeddings[lv]
-                embs = embs.view(
-                    embs.shape[0], embs.shape[1], -1, embeddings[lv].shape[-1]
-                )
+                embs = embs.view(embs.shape[0], embs.shape[1], -1, embeddings[lv].shape[-1])
                 # average pooling
                 embeddings[lv] = torch.mean(embs, dim=2)
             else:
@@ -533,9 +447,7 @@ def extract_hierarchical_embeddings(args):
                         embeddings[lv].repeat_interleave(repeats=tps, dim=1),
                         sliding_window=sliding_window,
                     )
-                    .detach()
-                    .cpu()
-                    .numpy()
+                    .detach().cpu().numpy()
                 )
 
         end_idx = start_idx + full_seq_len
@@ -556,13 +468,11 @@ def extract_hierarchical_embeddings(args):
                             ],
                             axis=1,
                         )
-
         start_idx = end_idx
 
     while submissions:
 
         lv, embs = submissions.popitem()
-
         # if constructed frame_embeddings are bigger than mabe evaluation allows, compress it with pca
         if embs.shape[1] > max_frame_emb_size:
             print("Compressing frame embeddings with PCA...")
@@ -580,13 +490,9 @@ def extract_hierarchical_embeddings(args):
                 ev = sum(ipca.explained_variance_ratio_)
                 embs_pca = np.zeros((len(embs), max_frame_emb_size)).astype(np.float32)
                 for i in tqdm(range(0, len(embs_pca), batch_size)):
-                    embs_pca[i : i + batch_size] = ipca.transform(
-                        embs[i : i + batch_size]
-                    )
+                    embs_pca[i : i + batch_size] = ipca.transform(embs[i : i + batch_size])
 
-            print(
-                f"transformed shape for level {lv}: from {embs.shape} to {embs_pca.shape}"
-            )
+            print(f"transformed shape for level {lv}: from {embs.shape} to {embs_pca.shape}")
             print("explained variance: ", ev)
 
         else:
@@ -604,8 +510,6 @@ def extract_hierarchical_embeddings(args):
 
 
 # HELPER FUNCTIONS
-
-
 def averaging_sum(results_vector, embeds, sliding_window=1):
     start = 0
     for emb in embeds:

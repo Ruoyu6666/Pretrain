@@ -9,7 +9,6 @@
 *.pth
 **/__pycache__/**
 .ipynb_checkpoints/
-datasets/data/
 experiment-*
 *.tmp
 *.pkl
@@ -20,5 +19,5 @@ not_tracked_dir/
 log_dir
 *.pt
 data
-outputs
+BehaveMAE/outputs
 logs

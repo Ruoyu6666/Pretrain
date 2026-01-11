@@ -181,9 +181,7 @@ class HBehaveMAE(GeneralizedHiera):
         B, C, T, H, W = input_vid.shape
 
         # Ensure that the dimensions are divisible by the patch sizes
-        assert (
-            T % t == 0
-        ), "T (num_timesteps) must be divisible by t (temporal patch size)"
+        assert T % t == 0, "T (num_timesteps) must be divisible by t (temporal patch size)"
         assert H % h == 0, "H (height) must be divisible by h (height patch size)"
         assert W % w == 0, "W (width) must be divisible by w (width patch size)"
 
@@ -208,9 +206,7 @@ class HBehaveMAE(GeneralizedHiera):
         _, _, T, H, W = input_vid.shape
         t_num_blocks, h_num_blocks, w_num_blocks = self.tokens_spatial_shape_final
 
-        label = self.patch_pixel_label_3d(
-            input_vid, T // t_num_blocks, H // h_num_blocks, W // w_num_blocks
-        )
+        label = self.patch_pixel_label_3d(input_vid, T // t_num_blocks, H // h_num_blocks, W // w_num_blocks)
         label = label.reshape(mask.shape[0], mask.shape[1], -1)
 
         label = label[mask]
@@ -238,7 +234,6 @@ class HBehaveMAE(GeneralizedHiera):
         if self.decoding_strategy == "single":
             # Use only the last layer's output for decoding
             x = intermediates[-1]
-
         else:
             # Multi-scale fusion
             x = 0.0
@@ -291,7 +286,6 @@ class HBehaveMAE(GeneralizedHiera):
         for blk in self.decoder_blocks:
             x = blk(x)
         x = self.decoder_norm(x)
-
         # Predictor projection
         x = self.decoder_pred(x)
 
