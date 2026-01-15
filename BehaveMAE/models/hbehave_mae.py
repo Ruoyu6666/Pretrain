@@ -111,13 +111,9 @@ class HBehaveMAE(GeneralizedHiera):
         # --------------------------------------------------------------------------
         # MAE decoder specifics
         self.decoder_embed = nn.Linear(encoder_dim_out, decoder_embed_dim)
-
         self.mask_token = nn.Parameter(torch.zeros(1, 1, decoder_embed_dim))
-
         self.decoder_pos_embed = nn.Parameter(
-            torch.zeros(
-                1, math.prod(self.tokens_spatial_shape_final), decoder_embed_dim
-            )
+            torch.zeros(1, math.prod(self.tokens_spatial_shape_final), decoder_embed_dim)
         )
 
         self.decoder_blocks = nn.ModuleList(
@@ -136,9 +132,7 @@ class HBehaveMAE(GeneralizedHiera):
 
         # patch stride of prediction
         # reconstruct every t-th frame, with t being the temporal stride of the initial patches
-        self.pred_stride = (
-            patch_stride[-1] * patch_stride[-2] * math.prod(overall_q_strides)
-        )
+        self.pred_stride = (patch_stride[-1] * patch_stride[-2] * math.prod(overall_q_strides))
 
         self.decoder_pred = nn.Linear(
             decoder_embed_dim,
@@ -147,9 +141,7 @@ class HBehaveMAE(GeneralizedHiera):
         # --------------------------------------------------------------------------
 
         self.decoding_strategy = decoding_strategy
-
         self.norm_loss = norm_loss
-
         self.initialize_weights()
 
     def initialize_weights(self):
@@ -208,7 +200,6 @@ class HBehaveMAE(GeneralizedHiera):
 
         label = self.patch_pixel_label_3d(input_vid, T // t_num_blocks, H // h_num_blocks, W // w_num_blocks)
         label = label.reshape(mask.shape[0], mask.shape[1], -1)
-
         label = label[mask]
 
         if self.norm_loss:
@@ -244,14 +235,12 @@ class HBehaveMAE(GeneralizedHiera):
 
         return x, mask
 
-    def forward_decoder(
-        self, x: torch.Tensor, mask: torch.Tensor
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    def forward_decoder(self, x: torch.Tensor, mask: torch.Tensor
+                        ) -> Tuple[torch.Tensor, torch.Tensor]:
         # Embed tokens
         x = self.decoder_embed(x)
 
         # Combine visible and mask tokens
-
         # x: [B, #MUs, *mask_unit_spatial_shape_final, encoder_dim_out]
         # mask: [B, #MUs_all]
         x_dec = torch.zeros(*mask.shape, *x.shape[2:], device=x.device, dtype=x.dtype)
@@ -274,7 +263,6 @@ class HBehaveMAE(GeneralizedHiera):
             self.tokens_spatial_shape_final,
             self.mask_unit_spatial_shape_final,
         )
-
         # Flatten
         x = x.reshape(x.shape[0], -1, x.shape[-1])
         mask = mask.view(x.shape[0], -1)
@@ -305,31 +293,20 @@ class HBehaveMAE(GeneralizedHiera):
             label = self.get_label_3d(x, mask)
         else:
             raise NotImplementedError
-
         pred = pred[mask]
-
         # MSE loss
         loss = (pred - label) ** 2
 
         return loss.mean(), pred, label, None
 
-    def forward(
-        self,
-        x: torch.Tensor,
-        targets: Optional[torch.Tensor] = None,
-        mask_ratio: float = 0.6,
-        mask_strategy: str = "random",
-        mask: Optional[torch.Tensor] = None,
+    def forward(self, x: torch.Tensor, targets: Optional[torch.Tensor] = None,
+        mask_ratio: float = 0.6,  mask_strategy: str = "random", mask: Optional[torch.Tensor] = None,
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
 
         # add channel dimension
         x = x.unsqueeze(1)
-
         latent, mask = self.forward_encoder(x, mask_ratio, mask=mask)
-
-        pred, pred_mask = self.forward_decoder(
-            latent, mask
-        )  # pred_mask is mask at resolution of *prediction*
+        pred, pred_mask = self.forward_decoder(latent, mask)  # pred_mask is mask at resolution of *prediction*
 
         # Toggle mask, to generate labels for *masked* tokens
         return *self.forward_loss(x, pred, ~pred_mask), mask

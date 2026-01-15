@@ -32,22 +32,18 @@ class Dataset(CachedDataset):
                             track of the video name for each sample.
     """
 
-    def __init__(
-        self, input_feats, target_feats, ignore_frames, *,
-        hoa_bins=32,   # K
-        hoa_window=30, # L
-        cache_path=None, cache=False,
-        annotations=None, **kwargs,
-    ):
+    def __init__(self, input_feats, target_feats, ignore_frames, *,
+                hoa_bins=32,   # K
+                hoa_window=30, # L
+                cache_path=None, cache=False, annotations=None, **kwargs,):
+        
         self.input_feats = input_feats
         self.target_feats = target_feats
         self.ignore_frames = ignore_frames
 
         assert hoa_bins <= 255, "n_bins must be less than 256, got {}.".format(hoa_bins)
         self.hoa_bins = hoa_bins
-        assert hoa_window <= 255, "hoa_window must be less than 256, got {}.".format(
-            hoa_window
-        )
+        assert hoa_window <= 255, "hoa_window must be less than 256, got {}.".format(hoa_window)
         self.hoa_window = hoa_window
         cache_path = "./data/tmp" if cache_path is None else cache_path
         cache_path = cache_path + f"_bins{self.hoa_bins}.pkl"
@@ -171,11 +167,7 @@ class KeypointsDataset(Dataset):
         cache (bool): Whether to use the cache file.
     """
 
-    def __init__(
-        self,
-        keypoints,
-        **kwargs,
-    ):
+    def __init__(self, keypoints, **kwargs,):
         self.keypoints = keypoints
         input_feats, target_feats, ignore_frames = self.keypoints_to_feats(keypoints)
 

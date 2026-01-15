@@ -1,34 +1,19 @@
-# This source code is licensed under the license found in the
-# LICENSE file in the root directory of this source tree.
-# --------------------------------------------------------
-#
-# For more details on our work, please refer to:
-# Elucidating the Hierarchical Nature of Behavior with Masked Autoencoders
-# Lucas Stoffl, Andy Bonnetto, Stéphane d'Ascoli, Alexander Mathis
-# https://www.biorxiv.org/content/10.1101/2024.08.06.606796v1
-# --------------------------------------------------------
 
 import __future__
-
 import copy
 from abc import abstractmethod
 from pathlib import Path
 from typing import Union
-
 import numpy as np
+
 import torch
-import torch.utils.data
-
-# Some functions are adapted from TREBA
-# "TREBA" by Sun, Jennifer J and Kennedy, Ann and Zhan, Eric and Anderson, David J and Yue, Yisong and Perona, Pietro is licensed under CC BY-NC-SA 4.0 license.
-# https://github.com/neuroethology/TREBA/blob/c522e169738f5225298cd4577e5df9085130ce8a/util/datasets/mouse_v1/augmentations/augmentation_functions.py
+from torch.utils.data import Dataset
 
 
-class BasePoseTrajDataset(torch.utils.data.Dataset):
+class BasePoseTrajDataset(Dataset):
     """
     Primary Pose Trajectory (+Features) dataset.
     """
-
     DEFAULT_FRAME_RATE = None
     DEFAULT_GRID_SIZE = None
     NUM_INDIVIDUALS = None
@@ -42,21 +27,16 @@ class BasePoseTrajDataset(torch.utils.data.Dataset):
     STR_BODY_PARTS = None
     BODY_PART_2_INDEX = None
 
-    def __init__(
-        self,
-        path_to_data_dir: Path,
-        scale: bool = True,
-        sampling_rate: int = 1,
-        num_frames: int = 80,
-        sliding_window: int = 1,
-        interp_holes: bool = False,
-        patch_size: tuple = (4, 1, 2),
-        q_strides: list = [(1, 1, 3), (1, 1, 4), (1, 3, 1)],
-        **kwargs
-    ):
+    def __init__(self, path_to_data_dir: Path, 
+                 scale: bool = True, sampling_rate: int = 1, num_frames: int = 80,
+                 sliding_window: int = 1, if_fill_holes: bool = False,
+                 cache_path: Path = None, cache=True,
+                 #patch_size: tuple = (4, 1, 2), q_strides: list = [(1, 1, 3), (1, 1, 4), (1, 3, 1)],
+                 **kwargs):
 
         self.path = path_to_data_dir
         self.scale = scale
+        self._sampling_rate = sampling_rate
 
         # defined if data has been loaded
         self.has_annotations = None
@@ -73,9 +53,9 @@ class BasePoseTrajDataset(torch.utils.data.Dataset):
         self.sliding_window = sliding_window
 
         self.augmentations = None
-        self._sampling_rate = sampling_rate
-        self.interp_holes = interp_holes
-        self.patch_size = patch_size
+        self.if_fill_holes = if_fill_holes
+        #self.patch_size = patch_size
+
 
     def get_kwargs(self) -> dict:
         """returns positional arguments"""
@@ -164,17 +144,9 @@ class BasePoseTrajDataset(torch.utils.data.Dataset):
         scale = [int(self.DEFAULT_GRID_SIZE / 2), int(self.DEFAULT_GRID_SIZE / 2),] * state_dim
         return np.divide(data - shift, scale)
 
-    @staticmethod
-    def _normalize(data, grid_size):
-        """Scale by dimensions of image and mean-shift to center of image."""
-        state_dim = data.shape[1] // 2
-        shift = [int(grid_size / 2), int(grid_size / 2)] * state_dim
-        scale = [int(grid_size / 2), int(grid_size / 2)] * state_dim
-        return np.divide(data - shift, scale)
 
     def unnormalize(self, data):
-        """Undo normalize.
-        expects input data to be [sequence length, coordinates alternating between x and y]
+        """Undo normalize. Expects input data to be [sequence length, coordinates alternating between x and y]
         """
         if torch.is_tensor(data):
             data = data.detach().cpu().numpy()
@@ -189,27 +161,9 @@ class BasePoseTrajDataset(torch.utils.data.Dataset):
 
         return data.reshape(-1, state_dim * 2)
 
-    @staticmethod
-    def _unnormalize(data, grid_size):
-        """Undo normalize.
-        expects input data to be [sequence length, coordinates alternating between x and y]
-        """
-        if torch.is_tensor(data):
-            data = data.detach().cpu().numpy()
-        state_dim = data.shape[1] // 2
-        x_shift = int(grid_size / 2)
-        y_shift = int(grid_size / 2)
-        x_scale = int(grid_size / 2)
-        y_scale = int(grid_size / 2)
-
-        data[:, ::2] = data[:, ::2] * x_scale + x_shift
-        data[:, 1::2] = data[:, 1::2] * y_scale + y_shift
-
-        return data.reshape(-1, state_dim * 2)
 
     def transform_to_centered_data(self, data, center_index):
         # implemented only for mice
-
         # data shape is seq_len, num_inds, num_kpts, kpts_dims -> seq_len*num_inds, num_kpts, kpts_dims
         data = data.reshape(-1, *data.shape[2:])
 
@@ -224,54 +178,43 @@ class BasePoseTrajDataset(torch.utils.data.Dataset):
             data[:, tail_base, 0] - data[:, neck, 0],
             data[:, tail_base, 1] - data[:, neck, 1],
         )
-
         R = np.array(
             [
                 [np.cos(mouse_rotation), -np.sin(mouse_rotation)],
                 [np.sin(mouse_rotation), np.cos(mouse_rotation)],
             ]
         ).transpose((2, 0, 1))
-
         # Encode mouse rotation as sine and cosine
         mouse_rotation = np.concatenate(
             [
                 np.sin(mouse_rotation)[:, np.newaxis],
                 np.cos(mouse_rotation)[:, np.newaxis],
-            ],
-            axis=-1,
+            ], axis=-1,
         )
-
         centered_data = np.matmul(R, centered_data.transpose(0, 2, 1))
         centered_data = centered_data.transpose((0, 2, 1))
-
         centered_data = centered_data.reshape((-1, 24))
 
         # mean = np.mean(centered_data, axis=0)
         # centered_data = centered_data - mean
         return mouse_center, mouse_rotation, centered_data
 
+
     def transform_to_centeralign_components(self, data, center_index=7):
-
         seq_len, num_mice = data.shape[:2]
-
-        mouse_center, mouse_rotation, centered_data = self.transform_to_centered_data(
-            data, center_index
-        )
-
+        mouse_center, mouse_rotation, centered_data = self.transform_to_centered_data(data, center_index)
         # Concatenate state as mouse center, mouse rotation and svd components
         data = np.concatenate([mouse_center, mouse_rotation, centered_data], axis=1)
         data = data.reshape(seq_len, num_mice, -1)
-
         return data
+
 
     def get_random_sample_from_sequence(self, sequence: np.ndarray):
         """
         Returns a training sample
-
         Randomly samples a section with length self.max_keypoints_len of the input sequence.
         """
-
-        if self.interp_holes:
+        if self.if_fill_holes:
             sequence = self.fill_holes(sequence)
 
         start = np.random.randint(0, sequence.shape[0] - self.max_keypoints_len)
@@ -280,34 +223,29 @@ class BasePoseTrajDataset(torch.utils.data.Dataset):
 
         if self.augmentations:
             keypoints = keypoints.reshape(
-                self.max_keypoints_len,
-                self.NUM_INDIVIDUALS,
-                self.NUM_KEYPOINTS,
-                self.KPTS_DIMENSIONS,
+                self.max_keypoints_len, self.NUM_INDIVIDUALS, 
+                self.NUM_KEYPOINTS, self.KPTS_DIMENSIONS,
             )
             keypoints = self.augmentations(keypoints)
             keypoints = keypoints.reshape(self.max_keypoints_len, -1)
 
         # Do scale, flatten and tensor AFTER features
         feats = self.featurise_keypoints(keypoints)
-
         # flatten for now
         feats = feats.reshape(self.max_keypoints_len, self.NUM_INDIVIDUALS, -1)
 
         return feats
 
+
     def prepare_subsequence_sample(self, sequence: np.ndarray):
         """
         Returns a training sample
         """
-
         if self.augmentations:
             sequence = sequence.reshape(self.max_keypoints_len, *self.KEYFRAME_SHAPE)
             sequence = self.augmentations(sequence)
             sequence = sequence.reshape(self.max_keypoints_len, -1)
-
         feats = self.featurise_keypoints(sequence)
-
         # flatten for now
         feats = feats.reshape(self.max_keypoints_len, self.NUM_INDIVIDUALS, -1)
 

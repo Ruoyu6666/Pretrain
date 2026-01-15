@@ -29,7 +29,7 @@ common_args="--dataset mabe_mice \
     --mask_ratio 0.875 \
     --clip_grad 0.02 \
     --checkpoint_period 20 \
-    --fill_holes False \
+    --if_fill_holes False \
     --data_augment True \
     --norm_loss True \
     --seed 0 \

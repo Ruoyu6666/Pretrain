@@ -41,26 +41,13 @@ from util.misc import parse_tuples, str2bool
 
 def get_args_parser():
     parser = argparse.ArgumentParser("hBehaveMAE pre-training", add_help=False)
-    parser.add_argument(
-        "--batch_size",
-        default=4,
-        type=int,
-        help="Batch size per GPU (effective batch size is batch_size * accum_iter * # gpus",
-    )
+    parser.add_argument("--batch_size", default=4, type=int,
+        help="Batch size per GPU (effective batch size is batch_size * accum_iter * # gpus",)
     parser.add_argument("--epochs", default=100, type=int)
-    parser.add_argument(
-        "--accum_iter",
-        default=1,
-        type=int,
-        help="Accumulate gradient iterations (for increasing the effective batch size under memory constraints)",
-    )
+    parser.add_argument("--accum_iter", default=1, type=int,
+        help="Accumulate gradient iterations (for increasing the effective batch size under memory constraints)",)
 
-    parser.add_argument(
-        "--dataset",
-        default="shot7m2",
-        type=str,
-        help="Type of dataset [shot7m2, mabe_mice, hbabel]",
-    )
+    parser.add_argument("--dataset",default="shot7m2", type=str, help="Type of dataset [shot7m2, mabe_mice, hbabel]",)
 
     parser.add_argument("--sliding_window", default=1, type=int)
     parser.add_argument("--fill_holes", default=False, type=str2bool)
@@ -72,33 +59,15 @@ def get_args_parser():
     parser.add_argument("--joints3d_procrustes", default=True, type=str2bool)
 
     # Model parameters
-    parser.add_argument(
-        "--model",
-        default="hbehavemae",
-        type=str,
-        metavar="MODEL",
-        help="Name of model to train",
-    )
+    parser.add_argument("--model", default="hbehavemae", type=str,metavar="MODEL", help="Name of model to train",)
     # train a non-hierarchical model ("BehaveMAE")
     parser.add_argument("--non_hierarchical", default=False, type=str2bool)
 
-    parser.add_argument(
-        "--mask_ratio",
-        default=0.75,
-        type=float,
-        help="Masking ratio (percentage of removed patches).",
-    )
-    parser.add_argument(
-        "--masking_strategy",
-        default="random",
-        type=str,
-    )
-    parser.add_argument(
-        "--decoding_strategy",
-        default="multi",
-        type=str,
-        help="Decoding strategy for combining latents [multi, single]",
-    )
+    parser.add_argument("--mask_ratio", default=0.75, type=float,
+        help="Masking ratio (percentage of removed patches).",)
+    parser.add_argument("--masking_strategy", default="random", type=str, )
+    parser.add_argument("--decoding_strategy", default="multi", type=str,
+        help="Decoding strategy for combining latents [multi, single]",)
     parser.add_argument("--decoder_embed_dim", default=128, type=int)
     parser.add_argument("--decoder_depth", default=1, type=int)
     parser.add_argument("--decoder_num_heads", default=1, type=int)
@@ -110,12 +79,8 @@ def get_args_parser():
     # hBehaveMAE specific parameters
     parser.add_argument("--input_size", default=(600, 3, 24), nargs="+", type=int)
     parser.add_argument("--stages", default=(2, 3, 4), nargs="+", type=int)
-    parser.add_argument(
-        "--q_strides", default=[(1, 1, 3), (1, 1, 4), (1, 3, 1)], type=parse_tuples
-    )
-    parser.add_argument(
-        "--mask_unit_attn", default=[True, False, False], nargs="+", type=str2bool
-    )
+    parser.add_argument("--q_strides", default=[(1, 1, 3), (1, 1, 4), (1, 3, 1)], type=parse_tuples)
+    parser.add_argument("--mask_unit_attn", default=[True, False, False], nargs="+", type=str2bool)
     parser.add_argument("--patch_kernel", default=(4, 1, 2), nargs="+", type=int)
     parser.add_argument("--init_embed_dim", default=48, type=int)
     parser.add_argument("--init_num_heads", default=2, type=int)
@@ -124,105 +89,47 @@ def get_args_parser():
     parser.add_argument("--norm_loss", default=True, type=str2bool)
 
     # Optimizer parameters
-    parser.add_argument(
-        "--weight_decay", type=float, default=0.05, help="weight decay (default: 0.05)"
-    )
+    parser.add_argument("--weight_decay", type=float, default=0.05, help="weight decay (default: 0.05)")
 
-    parser.add_argument(
-        "--lr",
-        type=float,
-        default=None,
-        metavar="LR",
-        help="learning rate (absolute lr)",
-    )
-    parser.add_argument(
-        "--blr",
-        type=float,
-        default=1e-3,
-        metavar="LR",
-        help="base learning rate: absolute_lr = base_lr * total_batch_size / 256",
-    )
-    parser.add_argument(
-        "--min_lr",
-        type=float,
-        default=0.0,
-        metavar="LR",
-        help="lower lr bound for cyclic schedulers that hit 0",
-    )
+    parser.add_argument("--lr", type=float, default=None, metavar="LR",
+        help="learning rate (absolute lr)",)
+    parser.add_argument("--blr", type=float, default=1e-3, metavar="LR",
+        help="base learning rate: absolute_lr = base_lr * total_batch_size / 256",)
+    parser.add_argument("--min_lr", type=float, default=0.0, metavar="LR",
+        help="lower lr bound for cyclic schedulers that hit 0",)
 
-    parser.add_argument(
-        "--warmup_epochs", type=int, default=40, metavar="N", help="epochs to warmup LR"
-    )
-    parser.add_argument(
-        "--path_to_data_dir",
-        default="",
-        help="path where to load data from",
-    )
-    parser.add_argument(
-        "--output_dir",
-        default="./output_dir",
-        help="path where to save",
-    )
-    parser.add_argument(
-        "--log_dir",
-        default="./log_dir",
-        help="path where to tensorboard log",
-    )
-    parser.add_argument(
-        "--device", default="cuda", help="device to use for training / testing"
-    )
+    parser.add_argument("--warmup_epochs", type=int, default=40, metavar="N", help="epochs to warmup LR")
+    parser.add_argument("--path_to_data_dir", default="", help="path where to load data from",)
+    parser.add_argument("--output_dir", default="./output_dir", help="path where to save",)
+    parser.add_argument("--log_dir", default="./log_dir", help="path where to tensorboard log",)
+    parser.add_argument( "--device", default="cuda", help="device to use for training / testing")
     parser.add_argument("--seed", default=0, type=int)
     parser.add_argument("--resume", default="", help="resume from checkpoint")
 
-    parser.add_argument(
-        "--start_epoch", default=0, type=int, metavar="N", help="start epoch"
-    )
+    parser.add_argument("--start_epoch", default=0, type=int, metavar="N", help="start epoch")
     parser.add_argument("--num_workers", default=8, type=int)
-    parser.add_argument(
-        "--pin_mem",
-        action="store_true",
-        help="Pin CPU memory in DataLoader for more efficient (sometimes) transfer to GPU.",
-    )
+    parser.add_argument("--pin_mem", action="store_true", help="Pin CPU memory in DataLoader for more efficient (sometimes) transfer to GPU.",)
     parser.set_defaults(pin_mem=True)
 
     # distributed training parameters
-    parser.add_argument(
-        "--world_size", default=1, type=int, help="number of distributed processes"
-    )
+    parser.add_argument("--world_size", default=1, type=int, help="number of distributed processes")
     parser.add_argument("--local_rank", default=-1, type=int)
     parser.add_argument("--dist_on_itp", action="store_true")
     parser.add_argument("--no_env", action="store_true")
 
-    parser.add_argument(
-        "--dist_url", default="env://", help="url used to set up distributed training"
-    )
+    parser.add_argument("--dist_url", default="env://", help="url used to set up distributed training")
 
-    parser.add_argument(
-        "--clip_grad",
-        type=float,
-        default=None,
-    )
+    parser.add_argument("--clip_grad", type=float, default=None,)
     parser.add_argument("--no_qkv_bias", action="store_true")
     parser.add_argument("--bias_wd", action="store_true")
     parser.add_argument("--num_checkpoint_del", default=20, type=int)
     parser.add_argument("--sep_pos_embed", action="store_true")
     parser.set_defaults(sep_pos_embed=True)
-    parser.add_argument(
-        "--trunc_init",
-        action="store_true",
-    )
-    parser.add_argument(
-        "--fp32",
-        action="store_true",
-    )
+    parser.add_argument("--trunc_init",action="store_true",)
+    parser.add_argument("--fp32", action="store_true",)
     parser.set_defaults(fp32=True)
 
-    parser.add_argument(
-        "--beta",
-        default=None,
-        type=float,
-        nargs="+",
-    )
+    parser.add_argument("--beta", default=None, type=float,nargs="+",)
     return parser
 
 
@@ -360,9 +267,7 @@ def main(args):
         data_loader_test = None
 
     # define the model
-    model = models_defs.__dict__[args.model](
-        **vars(args),
-    )
+    model = models_defs.__dict__[args.model](**vars(args),)
     model.to(device)
 
     model_without_ddp = model
@@ -419,13 +324,8 @@ def main(args):
         if args.distributed:
             data_loader_train.sampler.set_epoch(epoch)
         train_stats = train_one_epoch(
-            model,
-            data_loader_train,
-            data_loader_test,
-            optimizer,
-            device,
-            epoch,
-            loss_scaler,
+            model, data_loader_train, data_loader_test,
+            optimizer, device, epoch, loss_scaler,
             log_writer=log_writer,
             args=args,
             fp32=args.fp32,

@@ -7,9 +7,8 @@ from torch.utils.data import Dataset
 
 
 class CachedDataset(Dataset, abc.ABC):
-    r"""A simple dataset class that caches processed data. This is useful for
-    large datasets that require a lot of processing to be done before they can be
-    used. The processed data is cached in a pickle file.
+    r"""A simple dataset class that caches processed data. This is useful for large datasets that require a lot of 
+    processing to be done before they can be used. The processed data is cached in a pickle file.
 
     This class is meant to be subclassed. The subclass should implement the
     `process` method, which should return a dictionary of data to be cached.
