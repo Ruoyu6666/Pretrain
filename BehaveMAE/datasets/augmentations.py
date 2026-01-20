@@ -27,9 +27,7 @@ class GaussianNoise:
 
     def __call__(self, keypoints: np.ndarray) -> np.ndarray:
         if np.random.random() < self.p:
-            noise = np.random.normal(self.mu, self.sigma, keypoints.shape).astype(
-                np.float32
-            )
+            noise = np.random.normal(self.mu, self.sigma, keypoints.shape).astype(np.float32)
             noisy_kpts = keypoints.copy()
             noisy_kpts = noisy_kpts + noise
             return noisy_kpts
@@ -49,9 +47,7 @@ class Rotation:
 
         original = keypoints.copy()
         rot_kpts = keypoints.copy()
-        rot_kpts = rot_kpts.transpose(
-            1, 0, 2, 3
-        )  # => should transpose to (NUM_MICE, seq_len, num_bpts, 2)
+        rot_kpts = rot_kpts.transpose(1, 0, 2, 3)  # => should transpose to (NUM_MICE, seq_len, num_bpts, 2)
 
         image_center = [self.grid_size[0] / 2, self.grid_size[1] / 2]
 
@@ -63,17 +59,13 @@ class Rotation:
             [
                 [np.cos(mouse_rotation), -np.sin(mouse_rotation)],
                 [np.sin(mouse_rotation), np.cos(mouse_rotation)],
-            ]
-        ).transpose((2, 0, 1))
+            ]).transpose((2, 0, 1))
 
         # iterate over number of animals/individuals
         for i in range(len(rot_kpts)):
             rot_kpts[i] = (
-                np.matmul(R, (rot_kpts[i] - image_center).transpose(0, 2, 1)).transpose(
-                    0, 2, 1
-                )
-                + image_center
-            )
+                np.matmul(R, (rot_kpts[i] - image_center).transpose(0, 2, 1)).transpose(0, 2, 1)
+                + image_center)
 
         # Check if possible for trajectory to fit within borders
         bounded = (
@@ -104,12 +96,8 @@ class Rotation:
             min_horizontal_shift = np.amin(rot_kpts[:, :, :, 0])
             max_vertical_shift = np.amin(self.grid_size[1] - rot_kpts[:, :, :, 1])
             min_vertical_shift = np.amin(rot_kpts[:, :, :, 1])
-            horizontal_shift = np.random.uniform(
-                low=-1 * min_horizontal_shift, high=max_horizontal_shift
-            )
-            vertical_shift = np.random.uniform(
-                low=-1 * min_vertical_shift, high=max_vertical_shift
-            )
+            horizontal_shift = np.random.uniform(low=-1 * min_horizontal_shift, high=max_horizontal_shift)
+            vertical_shift = np.random.uniform( min_vertical_shift, high=max_vertical_shift)
 
             rot_kpts[:, :, :, 0] = rot_kpts[:, :, :, 0] + horizontal_shift
             rot_kpts[:, :, :, 1] = rot_kpts[:, :, :, 1] + vertical_shift

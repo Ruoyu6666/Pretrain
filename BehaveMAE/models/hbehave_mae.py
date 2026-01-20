@@ -75,9 +75,7 @@ class HBehaveMAE(GeneralizedHiera):
         encoder_dim_out = self.projections[-1].out_features
         self.encoder_norm = norm_layer(encoder_dim_out)
 
-        overall_q_strides = list(
-            map(lambda elements: reduce(mul, elements), zip(*self.q_strides))
-        )
+        overall_q_strides = list(map(lambda elements: reduce(mul, elements), zip(*self.q_strides)))
         self.mask_unit_spatial_shape_final = [
             i // s for i, s in zip(self.mask_unit_size, overall_q_strides)
         ]
@@ -209,13 +207,12 @@ class HBehaveMAE(GeneralizedHiera):
 
         return label
 
-    def forward_encoder(
-        self, x: torch.Tensor, mask_ratio: float, mask: Optional[torch.Tensor] = None
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    def forward_encoder(self, x: torch.Tensor, mask_ratio: float, mask: Optional[torch.Tensor] = None
+                        ) -> Tuple[torch.Tensor, torch.Tensor]:
 
         if mask is None:
             mask = self.get_random_mask(x, mask_ratio)  # [B, #MUs_all]
-
+        print(x.size())
         # Get multi-scale representations from encoder
         _, intermediates = super().forward(x, mask, return_intermediates=True)
         # Resolution unchanged after q_pool stages, so skip those features
@@ -235,8 +232,7 @@ class HBehaveMAE(GeneralizedHiera):
 
         return x, mask
 
-    def forward_decoder(self, x: torch.Tensor, mask: torch.Tensor
-                        ) -> Tuple[torch.Tensor, torch.Tensor]:
+    def forward_decoder(self, x: torch.Tensor, mask: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         # Embed tokens
         x = self.decoder_embed(x)
 
@@ -274,14 +270,13 @@ class HBehaveMAE(GeneralizedHiera):
         for blk in self.decoder_blocks:
             x = blk(x)
         x = self.decoder_norm(x)
+
         # Predictor projection
         x = self.decoder_pred(x)
 
         return x, mask
 
-    def forward_loss(
-        self, x: torch.Tensor, pred: torch.Tensor, mask: torch.Tensor
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    def forward_loss(self, x: torch.Tensor, pred: torch.Tensor, mask: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         Note: in mask, 0 is *visible*, 1 is *masked*
 

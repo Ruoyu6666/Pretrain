@@ -246,23 +246,17 @@ def main(args):
     else:
         log_writer = None
 
+
     data_loader_train = torch.utils.data.DataLoader(
-        dataset_train,
-        sampler=sampler_train,
-        batch_size=args.batch_size,
-        num_workers=args.num_workers,
-        pin_memory=args.pin_mem,
-        drop_last=True,
-    )
+        dataset_train, sampler=sampler_train,
+        batch_size=args.batch_size, num_workers=args.num_workers,
+        pin_memory=args.pin_mem, drop_last=True,)
+    
     if dataset_test:
         data_loader_test = torch.utils.data.DataLoader(
-            dataset_test,
-            sampler=sampler_test,
-            batch_size=args.batch_size,
-            num_workers=args.num_workers,
-            pin_memory=args.pin_mem,
-            drop_last=False,
-        )
+            dataset_test, sampler=sampler_test,
+            batch_size=args.batch_size, num_workers=args.num_workers,
+            pin_memory=args.pin_mem, drop_last=False,)
     else:
         data_loader_test = None
 
@@ -287,27 +281,19 @@ def main(args):
     if args.distributed:
         fup = True if args.decoding_strategy == "single" else False
         model = torch.nn.parallel.DistributedDataParallel(
-            model,
-            device_ids=[torch.cuda.current_device()],
-            find_unused_parameters=fup,
+            model, device_ids=[torch.cuda.current_device()], find_unused_parameters=fup,
         )
         model_without_ddp = model.module
 
     # following timm: set wd as 0 for bias and norm layers
     param_groups = misc.add_weight_decay(
-        model_without_ddp,
-        args.weight_decay,
-        bias_wd=args.bias_wd,
+        model_without_ddp, args.weight_decay, bias_wd=args.bias_wd,
     )
     if args.beta is None:
         beta = (0.9, 0.95)
     else:
         beta = args.beta
-    optimizer = torch.optim._multi_tensor.AdamW(
-        param_groups,
-        lr=args.lr,
-        betas=beta,
-    )
+    optimizer = torch.optim._multi_tensor.AdamW(param_groups, lr=args.lr, betas=beta,)
     loss_scaler = NativeScaler(fp32=args.fp32)
 
     misc.load_model(
@@ -323,16 +309,9 @@ def main(args):
     for epoch in range(args.start_epoch, args.epochs):
         if args.distributed:
             data_loader_train.sampler.set_epoch(epoch)
-        train_stats = train_one_epoch(
-            model, data_loader_train, data_loader_test,
-            optimizer, device, epoch, loss_scaler,
-            log_writer=log_writer,
-            args=args,
-            fp32=args.fp32,
-        )
-        if args.output_dir and (
-            epoch % args.checkpoint_period == 0 or epoch + 1 == args.epochs
-        ):
+        train_stats = train_one_epoch(model, data_loader_train, data_loader_test, optimizer, 
+                                      device, epoch, loss_scaler,log_writer=log_writer,args=args, fp32=args.fp32,)
+        if args.output_dir and (epoch % args.checkpoint_period == 0 or epoch + 1 == args.epochs):
             checkpoint_path = misc.save_model(
                 args=args,
                 model=model,
@@ -350,10 +329,7 @@ def main(args):
         if args.output_dir and misc.is_main_process():
             if log_writer is not None:
                 log_writer.flush()
-            with pathmgr.open(
-                f"{args.output_dir}/log.txt",
-                "a",
-            ) as f:
+            with pathmgr.open(f"{args.output_dir}/log.txt", "a",) as f:
                 f.write(json.dumps(log_stats) + "\n")
 
     total_time = time.time() - start_time

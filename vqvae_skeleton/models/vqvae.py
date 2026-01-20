@@ -56,7 +56,7 @@ class ResidualStack(nn.Module):
 
 # Kernel size? Stride? Padding?
 # Compression factor?
-class Encoder(nn.Module):
+class  Encoder(nn.Module):
     """
     This is the q_theta (z|x) network. Given a data sample x q_theta 
     maps to the latent space x -> z.
@@ -81,9 +81,27 @@ class Encoder(nn.Module):
             nn.Conv2d(h_dim // 2, h_dim, kernel_size=kernel, stride=stride, padding=1),
             nn.ReLU(),
             nn.Conv2d(h_dim, h_dim, kernel_size=kernel-1, stride=stride-1, padding=1),
-            ResidualStack(h_dim, h_dim, res_h_dim, n_res_layers)
-            )
+            ResidualStack(h_dim, h_dim, res_h_dim, n_res_layers))
+        '''
+        self.spatial_encoder = nn.Sequential(
+            nn.Linear(num_joints * 2, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.ReLU()
+        )
+        
+        self.temporal_encoder = nn.LSTM(hidden_dim, hidden_dim, num_layers=2, batch_first=True)
+        '''
     def forward(self, x):
+        """
+        # x: (B, T, N, 2)
+        B, T, N, _ = x.shape
+        x = x.reshape(B, T, -1)  # (B, T, N*2)
+        
+        spatial_feat = self.spatial_encoder(x)  # (B, T, hidden_dim)
+        temporal_feat, _ = self.temporal_encoder(spatial_feat)  # (B, T, hidden_dim)
+        """
+
         return self.conv_stack(x)
 
 
@@ -111,8 +129,7 @@ class Decoder(nn.Module):
                 ResidualStack(h_dim, h_dim, res_h_dim, n_res_layers),
                 nn.ConvTranspose2d(h_dim, h_dim // 2, kernel_size=kernel, stride=stride, padding=1),
                 nn.ReLU(),
-                nn.ConvTranspose2d(h_dim//2, 3, kernel_size=kernel, stride=stride, padding=1)
-        )
+                nn.ConvTranspose2d(h_dim//2, 3, kernel_size=kernel, stride=stride, padding=1))
 
     def forward(self, x):
         return self.inverse_conv_stack(x)
@@ -148,21 +165,22 @@ class VectorQuantizer(nn.Module):
         """
         # reshape z -> (batch, height, width, channel) and flatten
         z = z.permute(0, 2, 3, 1).contiguous()
-        z_flattened = z.view(-1, self.e_dim)
+        z_flattened = z.view(-1, self.e_dim) # (B*H*W, C=e_dim)
+
         # distances from z to embeddings e_j (z - e)^2 = z^2 + e^2 - 2 e * z
         d = torch.sum(z_flattened**2, dim=1, keepdim=True) + \
             torch.sum(self.embedding.weight**2, dim=1) - \
             2 * torch.matmul(z_flattened, self.embedding.weight.t())
         
-        # get the encoding that has the min distance
+        # get the closest encoding
         min_encoding_indices = torch.argmin(d, dim=1).unsqueeze(1)
         min_encodings = torch.zeros(min_encoding_indices.shape[0], self.n_e, device=x.device)
         min_encodings.scatter_(1, min_encoding_indices, 1)
-
         # get quantized latent vectors
         z_q = torch.matmul(min_encodings, self.embedding.weight).view(z.shape)
+        
         # compute loss
-        loss = torch.mean((z_q.detach()-z)**2) + self.beta * torch.mean((z_q - z.detach()) ** 2)
+        loss = torch.mean((z_q.detach()-z)**2) + self.beta * torch.mean((z_q - z.detach()) ** 2) # e_latent_loss + q_latent_loss
         # preserve gradients
         z_q = z + (z_q - z).detach()
         # perplexity

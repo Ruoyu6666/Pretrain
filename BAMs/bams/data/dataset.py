@@ -102,15 +102,11 @@ class Dataset(CachedDataset):
 
     def __getitem__(self, item):
         # make histogram of actions
-        quantized_target_feat = self.quantized_target_feats[
-            item
-        ]  # shape (sequence_len, num_feats)
+        quantized_target_feat = self.quantized_target_feats[item]  # shape (sequence_len, num_feats)
         ignore_frames = self.ignore_frames[item]  # shape (sequence_len,)
 
         rows, cols = np.indices(quantized_target_feat.shape)
-        histogram_of_actions = np.zeros(
-            (*quantized_target_feat.shape, self.hoa_bins), dtype=np.uint8
-        )
+        histogram_of_actions = np.zeros((*quantized_target_feat.shape, self.hoa_bins), dtype=np.uint8)
         weights = np.zeros_like(self.ignore_frames[item], dtype=np.float32)
         for i in range(1, self.hoa_window + 1):
             histogram_of_actions[rows[:-i], cols[:-i], quantized_target_feat[:-i]] += 1
@@ -118,15 +114,12 @@ class Dataset(CachedDataset):
 
         histogram_of_actions = histogram_of_actions / self.hoa_window
         weights = weights / self.hoa_window
-
         ignore_frames[: -self.hoa_window] = True
 
-        data = dict(
-            input=self.input_feats[item],
-            target_hist=histogram_of_actions,
-            ignore_frames=self.ignore_frames[item],
-            ignore_weights=weights,
-        )
+        data = dict(input=self.input_feats[item],
+                    target_hist=histogram_of_actions,
+                    ignore_frames=self.ignore_frames[item],
+                    ignore_weights=weights,)
         if self.annotations is not None:
             for key in self.annotations:
                 data[key] = self.annotations[key][item]

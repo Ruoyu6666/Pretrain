@@ -3,7 +3,7 @@
 GPUS=$1
 
 common_args="--dataset mabe_mice \
-    --path_to_data_dir data/MABe22/mouse_triplet_train.npy \
+    --path_to_data_dir /home/rguo_hpc/myfolder/data/MaBe/mouse/mouse_triplet_train.npy \
     --batch_size 768 \
     --model hbehavemae \
     --input_size 900 3 24 \
@@ -29,7 +29,7 @@ common_args="--dataset mabe_mice \
     --mask_ratio 0.875 \
     --clip_grad 0.02 \
     --checkpoint_period 20 \
-    --if_fill_holes False \
+    --fill_holes False \
     --data_augment True \
     --norm_loss True \
     --seed 0 \

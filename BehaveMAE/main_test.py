@@ -190,6 +190,7 @@ def load_fusion_head(args, model):
     return multi_scale_fusion_heads.to(device).eval()
 
 
+
 def extract_hierarchical_embeddings(args):
 
     model, device = load_model(args)
@@ -210,42 +211,22 @@ def extract_hierarchical_embeddings(args):
         submission_clips = {"sequences": dict()}
         val = joblib.load(os.path.join(args.path_to_data_dir, "babel-smplh-30fps-male/val.pth.tar"))
         if args.joints3d_procrustes:
-            val = joblib.load(
-                os.path.join(
-                    args.path_to_data_dir,
-                    "babel-smplh-30fps-male/val_proc_realigned_procrustes.pth.tar",
-                )
-            )
-            submission_clips["sequences"].update(
-                {
-                    sample["babel_id"]: sample["joint_positions_processed"]
-                    for sample in val
-                }
-            )
-            nr_test_frames = sum(
-                map(lambda lst: len(lst), submission_clips["sequences"].values())
-            )
+            val = joblib.load(os.path.join(args.path_to_data_dir, "babel-smplh-30fps-male/val_proc_realigned_procrustes.pth.tar", ))
+            submission_clips["sequences"].update({sample["babel_id"]: sample["joint_positions_processed"] for sample in val})
+            nr_test_frames = sum(map(lambda lst: len(lst), submission_clips["sequences"].values()))
         else:
-            submission_clips["sequences"].update(
-                {sample["babel_id"]: sample["joint_positions"] for sample in val}
-            )
-            nr_test_frames = sum(
-                [len(sample) for sample in submission_clips["sequences"].values()]
-            )
+            submission_clips["sequences"].update({sample["babel_id"]: sample["joint_positions"] for sample in val})
+            nr_test_frames = sum([len(sample) for sample in submission_clips["sequences"].values()])
         num_animals = 1
         max_frame_emb_size = 64
     elif args.dataset == "mabe_mice":
-        submission_clips = np.load(
-            os.path.join(args.path_to_data_dir, "mouse_triplet_test.npy"),
-            allow_pickle=True,
-        ).item()
+        submission_clips = np.load(os.path.join(args.path_to_data_dir, "mouse_triplet_test.npy"), allow_pickle=True,).item()
         normalize = mice.MABeMouseDataset._normalize
         grid_size = 850
         fill_holes = mice.MABeMouseDataset.fill_holes
         num_animals = 3
         max_frame_emb_size = 128
-        nr_test_frames = (mice.MABeMouseDataset.DEFAULT_NUM_TESTING_POINTS
-            * mice.MABeMouseDataset.SAMPLE_LEN)
+        nr_test_frames = (mice.MABeMouseDataset.DEFAULT_NUM_TESTING_POINTS * mice.MABeMouseDataset.SAMPLE_LEN)
     else:
         raise NotImplementedError(f"Your specified dataset -- {args.dataset} -- is not supported...")
 
@@ -321,8 +302,7 @@ def extract_hierarchical_embeddings(args):
             if args.dataset == "hbabel":
                 vec_seq = vec_seq.reshape(-1, 25, 3)
                 vec_seq = vec_seq[:, hbabel.hBABELDataset.NTU_KPT_GROUPING, :].reshape(
-                    len(vec_seq), -1
-                )
+                    len(vec_seq), -1)
             else:
                 vec_seq = normalize(vec_seq, grid_size)
 
@@ -348,23 +328,16 @@ def extract_hierarchical_embeddings(args):
         if args.fast_inference:
             if data_test.shape[0] * sliding_window != len(vec_seq):
                 len_diff = len(vec_seq) - (data_test.shape[0] * sliding_window)
-                pad_vec = np.pad(
-                    vec_seq, ((pad, pad + sliding_window), (0, 0)), mode="edge"
-                )
-                data_test = sliding_window_view(
-                    pad_vec, window_shape=sub_seq_length, axis=0
-                )[::sliding_window].transpose(0, 2, 1)
+                pad_vec = np.pad(vec_seq, ((pad, pad + sliding_window), (0, 0)), mode="edge")
+                data_test = sliding_window_view(pad_vec, window_shape=sub_seq_length, axis=0
+                                                    )[::sliding_window].transpose(0, 2, 1)
             else:
                 len_diff = 0
 
-        data_test = data_test.reshape(
-            data_test.shape[0], data_test.shape[1], num_animals, -1
-        )
+        data_test = data_test.reshape(data_test.shape[0], data_test.shape[1], num_animals, -1)
         data_test = torch.tensor(data_test, dtype=torch.float32)
 
-        data_loader = torch.utils.data.DataLoader(
-            data_test, batch_size=args.batch_size, shuffle=False
-        )
+        data_loader = torch.utils.data.DataLoader(data_test, batch_size=args.batch_size, shuffle=False)
 
         with torch.no_grad():
             embeds = {level: [] for level in range(1, len(args.stages) + 1)}
@@ -384,18 +357,12 @@ def extract_hierarchical_embeddings(args):
                         x = fusion_head[-1](x)  # layer norm
                         fused_embeds.append(x.squeeze(0))
 
-        embeddings = {
-            level: torch.cat(embeds[level], 0)
-            for level in range(1, len(args.stages) + 1)
-        }
+        embeddings = {level: torch.cat(embeds[level], 0) for level in range(1, len(args.stages) + 1)}
         if args.combine_embeddings and args.fusion_head:
             embeddings["fused"] = torch.cat(fused_embeds, 0)
-        t_patch_sizes = np.cumprod(
-            np.insert(args.q_strides, 0, args.patch_kernel[0], axis=0)[:, 0]
-        )
+        t_patch_sizes = np.cumprod(np.insert(args.q_strides, 0, args.patch_kernel[0], axis=0)[:, 0])
 
         for lv in embeddings:
-
             if lv == "fused":
                 tps = t_patch_sizes[-1]
             else:
@@ -446,8 +413,7 @@ def extract_hierarchical_embeddings(args):
                         result_embeds,
                         embeddings[lv].repeat_interleave(repeats=tps, dim=1),
                         sliding_window=sliding_window,
-                    )
-                    .detach().cpu().numpy()
+                    ).detach().cpu().numpy()
                 )
 
         end_idx = start_idx + full_seq_len
@@ -462,11 +428,7 @@ def extract_hierarchical_embeddings(args):
                         submission[start_idx:end_idx, :] = embeddings["fused"]
                     else:
                         submission[start_idx:end_idx, :] = np.concatenate(
-                            [
-                                submissions[sub][start_idx:end_idx, :]
-                                for sub in range(len(args.stages))
-                            ],
-                            axis=1,
+                            [submissions[sub][start_idx:end_idx, :] for sub in range(len(args.stages))], axis=1,
                         )
         start_idx = end_idx
 

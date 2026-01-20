@@ -1,170 +1,129 @@
-import __future__
 import os
-from pathlib import Path
-import numpy as np
-import logging
 import pickle
-
+import logging
+import numpy as np
 import torch
+
+from .dataset import SkeletonDataset
 from torchvision import transforms
 
-from .augmentations import GaussianNoise, Reflect, Rotation
-from .pose_traj_dataset import BasePoseTrajDataset
 
 
-class MABeMouseDataset(BasePoseTrajDataset):
-    """
-    Primary Mouse (+Features) dataset.
-    """
-    DEFAULT_FRAME_RATE = 30
+class MabeMouseDataset(SkeletonDataset):
     DEFAULT_GRID_SIZE = 850
-    NUM_INDIVIDUALS = 3
-    NUM_KEYPOINTS = 12
-    KPTS_DIMENSIONS = 2
-    KEYFRAME_SHAPE = (NUM_INDIVIDUALS, NUM_KEYPOINTS, KPTS_DIMENSIONS)
-    DEFAULT_NUM_TRAINING_POINTS = 1600
-    DEFAULT_NUM_TESTING_POINTS = 3736
-    SAMPLE_LEN = 1800
-    NUM_TASKS = 13
 
-    NOSE = "nose"
-    EAR_LEFT = "ear_left"
-    EAR_RIGHT = "ear_right"
-    NECK = "neck"
-    FOREPAW_LEFT = "forepaw_left"
-    FOREPAW_RIGHT = "forepaw_right"
-    CENTER = "center"
-    HINDPAW_LEFT = "hindpaw_left"
-    HINDPAW_RIGHT = "hindpaw_right"
-    TAIL_BASE = "tail_base"
-    TAIL_MIDDLE = "tail_middle"
-    TAIL_TIP = "tail_tip"
-
-    STR_BODY_PARTS = [
-        NOSE, EAR_LEFT, EAR_RIGHT, NECK, FOREPAW_LEFT, FOREPAW_RIGHT,
-        CENTER, HINDPAW_LEFT, HINDPAW_RIGHT, TAIL_BASE, TAIL_MIDDLE, TAIL_TIP,
-    ]
-    BODY_PART_2_INDEX = {w: i for i, w in enumerate(STR_BODY_PARTS)}
-
-    def __init__(self, mode: str, path_to_data_dir: Path, 
-                 scale: bool=True, sampling_rate: int = 1, num_frames: int = 80,
-                 sliding_window: int = 1, if_fill_holes: bool = False,
-                 cache_path: Path = None, cache=True,
-                 augmentations: transforms.Compose = None, centeralign: bool = False, 
+    def __init__(self, 
+                 path_to_data_dir, 
+                 sampling_rate = 1, #num_frames = 80, 
+                 sliding_window = 1, if_fill = True,
+                 patch_size: tuple = (6, 1, 2), 
+                 cache_path = None, cache = True, 
+                 augmentations: transforms.Compose = None, #centeralign: bool = False, 
                  include_testdata: bool = False,
-                 **kwargs,):    # child class args
-
-        super().__init__(path_to_data_dir, scale, sampling_rate, num_frames, 
-                         sliding_window, if_fill_holes, **kwargs) # base class
-
-        self.sample_frequency = self.DEFAULT_FRAME_RATE  # downsample frames if needed
-        self.mode = mode
-        self.centeralign = centeralign
+                 **kwargs):
         
-        if augmentations:
-            gs = (self.DEFAULT_GRID_SIZE, self.DEFAULT_GRID_SIZE)
-            self.augmentations = transforms.Compose(
-                [Rotation(grid_size=gs, p=0.5),
-                 GaussianNoise(p=0.5),
-                 Reflect(grid_size=gs, p=0.5),])
-        else:
-            self.augmentations = None
+        super().__init__(path_to_data_dir, sampling_rate, #num_frames, 
+                         sliding_window, if_fill, patch_size, 
+                         cache_path, cache, **kwargs) # calls Baseclass.__init__(self, ....)
         
-        # processs data and/or load from cache
-        self.cache_path = cache_path
-        if not os.path.exists(self.cache_path) or not cache: # no cache file
-            #data = self.process()
-            self.load_data(include_testdata)
-            self.preprocess()
-            if cache:
-                self.save_processed_data(self.seq_keypoints, self.labels)
-        else:
-            data = self.load_from_processed()
-
-
-    def load_data(self, include_testdata) -> None:
-        if self.mode == "pretrain":
-            self.raw_data = np.load(self.path, allow_pickle=True).item()
-            if include_testdata:
-                raw_data_test = np.load(self.path.replace("train", "test"), allow_pickle=True).item()
-                self.raw_data["sequences"].update(raw_data_test["sequences"])
-        elif self.mode == "test":
-            self.raw_data = np.load(self.path.replace("train", "test"), allow_pickle=True).item()
-        else:
-            raise ValueError("Invalid mode: {}".format(self.mode))
-
-
-    def load_labeled_data(self) -> None:
-        self.raw_data = np.load(os.path.join(self.path, "mouse_triplet_test.npy"), allow_pickle=True).item()
-        self.frame_number_map = np.load(os.path.join(self.path, "frame_number_map.npy"), allow_pickle=True).item()
-        # frame_number_map, label_array, vocabulary, task_type
-        self.labels = np.load(os.path.join(self.path, "mouse_triplets_test_labels.npy"), allow_pickle=True).item()
-
-
-    def featurise_keypoints(self, keypoints):
-        keypoints = self.normalize(keypoints)
-        if self.centeralign:
-            keypoints = keypoints.reshape(self.max_keypoints_len, *self.KEYFRAME_SHAPE)
-            keypoints = self.transform_to_centeralign_components(keypoints)
-        keypoints = torch.tensor(keypoints, dtype=torch.float32)
-        return keypoints
+        
+        self.augmentations = augmentations
+        self.include_testdata = include_testdata
     
 
-    def preprocess(self):
+    def load_data(self):
+        """Load raw data"""
+        self.raw_data = np.load(self.path_to_data_dir, allow_pickle=True).item()
+        self.num_samples = len(self.raw_data)
 
+
+    def check_annotations(self) -> None:
+        """Annotation check handler"""
+        self.has_annotations = "vocabulary" in self.raw_data.keys()
+        if self.has_annotations:
+            self.annotation_names = self.raw_data["vocabulary"]
+
+
+    @staticmethod
+    def fill_holes(data):
+        """Fill zero """
+        clean_data = data.copy()
+        num_frames, num_individuals, num_joints, _ = clean_data.shape
+        # Fill frame 0 using future frames
+        for m in range(num_individuals):
+            holes = np.where(clean_data[0, m, :, 0] == 0)[0]
+            for h in holes:
+                valid = np.where(clean_data[:, m, h, 0] != 0)[0]
+                if valid.size > 0:
+                    clean_data[0, m, h, :] = clean_data[valid[0], m, h, :]
+        # Forward-fill remaining frames
+        for fr in range(1, num_frames):
+            for m in range(num_individuals):
+                holes = np.where(clean_data[fr, m, :, 0] == 0)[0]
+                clean_data[fr, m, holes, :] = clean_data[fr - 1, m, holes, :]
+
+
+    def preprocess(self):
+        """Initial preprocessing"""
         self.check_annotations()
 
         sequences = self.raw_data["sequences"]
         seq_keypoints = []
-        keypoints_ids = []
-        sub_seq_length = self.max_keypoints_len
-        sliding_window = self.sliding_window
+        keypoints_ids = [] 
         self.labels = {key: [] for key in self.annotation_names}
-
-        for seq_ix, (seq_name, sequence) in enumerate(sequences.items()):
+        
+        for seq_ix, (seq_name, sequence) in enumerate(sequences.items()): #index ,(mouse_name, value)
             vec_seq = sequence["keypoints"]
-            if self.if_fill_holes:
-                vec_seq = self.fill_holes(vec_seq)
-            # Preprocess sequences
-            #vec_seq = vec_seq.reshape(vec_seq.shape[0], -1)
-            vec_seq = vec_seq.reshape(vec_seq.shape[0], 3, -1)
-            if self._sampling_rate > 1:
-                vec_seq = vec_seq[:: self._sampling_rate]
-            """
-            # Pads the beginning and end of the sequence with duplicate frames
-            if sub_seq_length < 120:
-                pad_length = sub_seq_length
-            else:
-                pad_length = 120
-            pad_vec = np.pad(vec_seq,((pad_length // 2, pad_length - 1 - pad_length // 2), (0, 0)), mode="edge", )
-            keypoints_ids.extend([(seq_ix, i)for i in np.arange(0, len(pad_vec) - sub_seq_length + 1, sliding_window)])
-            """
+            if self.if_fill:
+                vec_seq = self.fill_holes(vec_seq) # 1800, 3, 12, 2
+            if self.sampling_rate > 1:
+                vec_seq = vec_seq[:: self.sampling_rate]
             seq_keypoints.append(vec_seq)
             for i in range(len(self.annotation_names)):
                 self.labels[self.annotation_names[i]].append(sequence["annotations"][i])
-
-        self.seq_keypoints = np.array(seq_keypoints, dtype=np.float32)
-        #self.items = list(np.arange(len(keypoints_ids)))
-        #self.keypoints_ids = keypoints_ids
-        #self.n_frames = len(self.keypoints_ids)
+            
+            keypoints_ids.extend([(seq_ix, i) for i in np.arange(0, len(pad_vec) - sub_seq_length + 1, sliding_window)])
+        
+        self.seq_keypoints = np.array(seq_keypoints, dtype=np.float32) # (1600, 1800, 3, 12, 2)
         for label_name in self.annotation_names:
             self.labels[label_name] = np.array(self.labels[label_name], dtype=np.float32)
 
         del self.raw_data
 
-    def save_processed_data(self, X, y):
+    def save_processed_data(self):
         os.makedirs(os.path.dirname(self.cache_path), exist_ok=True)
         with open(self.cache_path, "wb") as output:
-            pickle.dump({"keypoints": X, "labels": y}, output)
+            pickle.dump({"keypoints": self.seq_keypoints, "labels": self.labels}, output)
         logging.info("Processed data was saved to {}.".format(self.cache_path))
 
 
     def load_from_processed(self):
-        logging.warn(
-            "Loading processed data from {}. If raw data or processing scripts changed,"
-            " please delete this file to force the data to be re-processed, or use"
-            " `cache=False`".format(self.cache_path)
-        )
+        logging.warning( f"Loading processed data from {self.cache_path}. "
+                         "Delete this file or set cache=False if processing changed.")
         with open(self.cache_path, "rb") as fp:
-            data = pickle.load(fp)
-        return data
+            self.seq_keypoints, self.labels = pickle.load(fp)
+
+
+
+    def normalize(self, data): # for one sequence
+        """Scale by dimensions of image and mean-shift to center of image."""
+        state_dim = data.shape[1] // 2
+        shift = [int(self.DEFAULT_GRID_SIZE / 2), int(self.DEFAULT_GRID_SIZE / 2),] * state_dim
+        scale = [int(self.DEFAULT_GRID_SIZE / 2), int(self.DEFAULT_GRID_SIZE / 2),] * state_dim
+        return np.divide(data - shift, scale)
+    
+    def featurise_keypoints(self, keypoints): # for one sequence
+        # Option 1: flatten everything
+        keypoints = self.normalize(keypoints)
+        # To do add centeralign part
+        keypoints = torch.tensor(keypoints, dtype=torch.float32)
+        return keypoints
+
+    def prepare_subsequence_sample(self, sequence: np.ndarray): # prepare one sequence for __getitem__
+        """Returns a training sample"""
+        if self.augmentations:
+            sequence = sequence.reshape(self.max_keypoints_len, *self.KEYFRAME_SHAPE)
+            sequence = self.augmentations(sequence)
+            sequence = sequence.reshape(self.max_keypoints_len, -1)
+        feats = self.featurise_keypoints(sequence)
+        feats = feats.reshape(self.max_keypoints_len, -1) # 1800 * 72

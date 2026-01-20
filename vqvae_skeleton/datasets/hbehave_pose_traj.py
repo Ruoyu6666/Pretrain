@@ -30,8 +30,8 @@ class BasePoseTrajDataset(Dataset):
     def __init__(self, path_to_data_dir: Path, 
                  scale: bool = True, sampling_rate: int = 1, num_frames: int = 80,
                  sliding_window: int = 1, if_fill_holes: bool = False,
+                 patch_size: tuple = (4, 1, 2), # q_strides: list = [(1, 1, 3), (1, 1, 4), (1, 3, 1)],
                  cache_path: Path = None, cache=True,
-                 #patch_size: tuple = (4, 1, 2), q_strides: list = [(1, 1, 3), (1, 1, 4), (1, 3, 1)],
                  **kwargs):
 
         self.path = path_to_data_dir
@@ -54,7 +54,7 @@ class BasePoseTrajDataset(Dataset):
 
         self.augmentations = None
         self.if_fill_holes = if_fill_holes
-        #self.patch_size = patch_size
+        self.patch_size = patch_size
 
 
     def get_kwargs(self) -> dict:
@@ -110,31 +110,29 @@ class BasePoseTrajDataset(Dataset):
     def get_num_frames(self):
         return self.max_keypoints_len
 
+    #def __len__(self):
+    #    return self.keypoints_ids)
+
     def __len__(self):
-        return len(self.keypoints_ids)
+        return self.max_keypoints_len
 
     @staticmethod
     def fill_holes(data):
-        clean_data = copy.deepcopy(data)
-        num_individuals = clean_data.shape[1]
+        clean_data = data.copy()
+        num_frames, num_individuals, num_joints, _ = clean_data.shape
+        # ---- Fill frame 0 using future frames ----
         for m in range(num_individuals):
-            holes = np.where(clean_data[0, m, :, 0] == 0)
-            if not holes:
-                continue
-            for h in holes[0]:
-                sub = np.where(clean_data[:, m, h, 0] != 0)
-                if sub and sub[0].size > 0:
-                    clean_data[0, m, h, :] = clean_data[sub[0][0], m, h, :]
-                # else:
-                #     return np.empty((0))
+            holes = np.where(clean_data[0, m, :, 0] == 0)[0]
+            for h in holes:
+                valid = np.where(clean_data[:, m, h, 0] != 0)[0]
+                if valid.size > 0:
+                    clean_data[0, m, h, :] = clean_data[valid[0], m, h, :]
+        # ---- Forward-fill remaining frames ----
+        for fr in range(1, num_frames):
+            for m in range(num_individuals):
+                holes = np.where(clean_data[fr, m, :, 0] == 0)[0]
+                clean_data[fr, m, holes, :] = clean_data[fr - 1, m, holes, :]
 
-        for fr in range(1, np.shape(clean_data)[0]):
-            for m in range(3):
-                holes = np.where(clean_data[fr, m, :, 0] == 0)
-                if not holes:
-                    continue
-                for h in holes[0]:
-                    clean_data[fr, m, h, :] = clean_data[fr - 1, m, h, :]
         return clean_data
 
     def normalize(self, data):
@@ -194,7 +192,6 @@ class BasePoseTrajDataset(Dataset):
         centered_data = np.matmul(R, centered_data.transpose(0, 2, 1))
         centered_data = centered_data.transpose((0, 2, 1))
         centered_data = centered_data.reshape((-1, 24))
-
         # mean = np.mean(centered_data, axis=0)
         # centered_data = centered_data - mean
         return mouse_center, mouse_rotation, centered_data
@@ -205,56 +202,43 @@ class BasePoseTrajDataset(Dataset):
         mouse_center, mouse_rotation, centered_data = self.transform_to_centered_data(data, center_index)
         # Concatenate state as mouse center, mouse rotation and svd components
         data = np.concatenate([mouse_center, mouse_rotation, centered_data], axis=1)
-        data = data.reshape(seq_len, num_mice, -1)
+        data = data.reshape(seq_len, num_mice, -1) # 1800, 3, 24
         return data
 
 
     def get_random_sample_from_sequence(self, sequence: np.ndarray):
         """
-        Returns a training sample
-        Randomly samples a section with length self.max_keypoints_len of the input sequence.
+        Returns a training sample. Randomly samples a section with length self.max_keypoints_len of the input sequence.
         """
         if self.if_fill_holes:
             sequence = self.fill_holes(sequence)
-
         start = np.random.randint(0, sequence.shape[0] - self.max_keypoints_len)
         end = start + self.max_keypoints_len
         keypoints = sequence[start:end, :]
-
         if self.augmentations:
-            keypoints = keypoints.reshape(
-                self.max_keypoints_len, self.NUM_INDIVIDUALS, 
-                self.NUM_KEYPOINTS, self.KPTS_DIMENSIONS,
-            )
+            keypoints = keypoints.reshape(self.max_keypoints_len, self.NUM_INDIVIDUALS, 
+                                          self.NUM_KEYPOINTS, self.KPTS_DIMENSIONS,)
             keypoints = self.augmentations(keypoints)
             keypoints = keypoints.reshape(self.max_keypoints_len, -1)
-
-        # Do scale, flatten and tensor AFTER features
-        feats = self.featurise_keypoints(keypoints)
-        # flatten for now
-        feats = feats.reshape(self.max_keypoints_len, self.NUM_INDIVIDUALS, -1)
+        feats = self.featurise_keypoints(keypoints) # Do scale, flatten and tensor AFTER features
+        feats = feats.reshape(self.max_keypoints_len, self.NUM_INDIVIDUALS, -1) # flatten for now
 
         return feats
 
-
+    # ------------------------------------------------------------
     def prepare_subsequence_sample(self, sequence: np.ndarray):
-        """
-        Returns a training sample
-        """
+        """Returns a training sample"""
         if self.augmentations:
             sequence = sequence.reshape(self.max_keypoints_len, *self.KEYFRAME_SHAPE)
             sequence = self.augmentations(sequence)
             sequence = sequence.reshape(self.max_keypoints_len, -1)
         feats = self.featurise_keypoints(sequence)
-        # flatten for now
-        feats = feats.reshape(self.max_keypoints_len, self.NUM_INDIVIDUALS, -1)
-
+        feats = feats.reshape(self.max_keypoints_len, self.NUM_INDIVIDUALS, -1) # flatten for now
         return feats
 
+    # ------------------------------------------------------------
     def __getitem__(self, idx: int):
-
         subseq_ix = self.keypoints_ids[idx]
         subsequence = self.seq_keypoints[subseq_ix[0], subseq_ix[1] : subseq_ix[1] + self.max_keypoints_len]
-        inputs = self.prepare_subsequence_sample(subsequence)
 
-        return inputs, []
+        return self.prepare_subsequence_sample(subsequence), []
