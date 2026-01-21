@@ -257,22 +257,12 @@ class GeneralizedHiera(nn.Module):
         ]
         self.stage_ends = [sum(stages[:i]) - 1 for i in range(1, len(stages) + 1)]
 
-        self.patch_embed = PatchEmbed(
-            in_chans, embed_dim, patch_kernel, patch_stride, patch_padding
-        )
+        self.patch_embed = PatchEmbed(in_chans, embed_dim, patch_kernel, patch_stride, patch_padding)
 
         self.sep_pos_embed = sep_pos_embed
         if sep_pos_embed:
-            self.pos_embed_spatial = nn.Parameter(
-                torch.zeros(
-                    1,
-                    self.tokens_spatial_shape[1] * self.tokens_spatial_shape[2],
-                    embed_dim,
-                )
-            )
-            self.pos_embed_temporal = nn.Parameter(
-                torch.zeros(1, self.tokens_spatial_shape[0], embed_dim)
-            )
+            self.pos_embed_spatial = nn.Parameter(torch.zeros(1, self.tokens_spatial_shape[1] * self.tokens_spatial_shape[2], embed_dim,))
+            self.pos_embed_temporal = nn.Parameter(torch.zeros(1, self.tokens_spatial_shape[0], embed_dim))
         else:
             self.pos_embed = nn.Parameter(torch.zeros(1, num_tokens, embed_dim))
 
@@ -438,12 +428,8 @@ class GeneralizedHiera(nn.Module):
 
         x = self.patch_embed(
             x,
-            mask=mask.view(
-                x.shape[0], 1, *self.mask_spatial_shape
-            )  # B, C, *mask_spatial_shape
-            if mask is not None
-            else None,
-        )
+            mask=mask.view(x.shape[0], 1, *self.mask_spatial_shape)  
+            if mask is not None else None,) # B, C, *mask_spatial_shape
         x = x + self.get_pos_embed()
         x = self.unroll(x)
 

@@ -127,15 +127,13 @@ def train(args):
 def compute_representations(args):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     keypoints, split_mask, batch = load_mice_triplet(args.data_root)
-    # dataset
+    # Set up dataset
     if not Dataset.cache_is_available(args.cache_path, args.hoa_bins):
         print("Processing data...")
         input_feats, target_feats, ignore_frames = mouse_feature_extractor(keypoints)
     else:
         print("No need to process data")
-        input_feats = target_feats = ignore_frames = None
-    
-    # only use
+        input_feats = target_feats = ignore_frames = None  
     dataset = Dataset(
         input_feats=input_feats,
         target_feats=target_feats,
@@ -144,7 +142,7 @@ def compute_representations(args):
         hoa_bins=args.hoa_bins,
         hoa_window=30,)
     print("Number of sequences:", len(dataset))
-    # build model
+    # Set up model
     model = BAMS(input_size=dataset.input_size,
                 short_term=dict(num_channels=(64, 64, 32, 32), kernel_size=3),
                 long_term=dict(num_channels=(64, 64, 64, 32, 32), kernel_size=3, dilation=4),

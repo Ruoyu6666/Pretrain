@@ -18,11 +18,9 @@ class ResidualLayer(nn.Module):
         super(ResidualLayer, self).__init__()
         self.res_block = nn.Sequential(
             nn.ReLU(True),
-            nn.Conv2d(in_dim, res_h_dim, 
-                      kernel_size=3, stride=1, padding=1, bias=False),
+            nn.Conv2d(in_dim, res_h_dim, kernel_size=3, stride=1, padding=1, bias=False),
             nn.ReLU(True),
-            nn.Conv2d(res_h_dim, h_dim, 
-                      kernel_size=1, stride=1, bias=False)
+            nn.Conv2d(res_h_dim, h_dim, kernel_size=1, stride=1, bias=False)
         )
     def forward(self, x):
         x = x + self.res_block(x)
@@ -43,9 +41,7 @@ class ResidualStack(nn.Module):
                  kernel_size=[], stride=[], padding=[]):
         super(ResidualStack, self).__init__()
         self.n_res_layers = n_res_layers
-        self.stack = nn.ModuleList(
-            [ResidualLayer(in_dim, h_dim, res_h_dim)]*n_res_layers
-            )
+        self.stack = nn.ModuleList([ResidualLayer(in_dim, h_dim, res_h_dim)] * n_res_layers)
 
     def forward(self, x):
         for layer in self.stack:
@@ -56,10 +52,9 @@ class ResidualStack(nn.Module):
 
 # Kernel size? Stride? Padding?
 # Compression factor?
-class  Encoder(nn.Module):
+class Encoder(nn.Module):
     """
-    This is the q_theta (z|x) network. Given a data sample x q_theta 
-    maps to the latent space x -> z.
+    This is the q_theta (z|x) network. Given a data sample x q_theta  maps to the latent space x -> z.
     For a VQ VAE, q_theta outputs parameters of a categorical distribution.
 
     Inputs:
@@ -67,29 +62,37 @@ class  Encoder(nn.Module):
     - h_dim : the hidden layer dimension
     - res_h_dim : the hidden dimension of the residual block
     - n_res_layers : number of layers to stack
-
     """
     def __init__(self, in_dim, h_dim, n_res_layers, res_h_dim,
                  kernel_size=[], stride=[], padding=[],
-                 compression_factor=8):
+                 compression_factor=12):
         super(Encoder, self).__init__()
         kernel = 4
         stride = 2
-        self.conv_stack = nn.Sequential(
-            nn.Conv2d(in_dim, h_dim // 2, kernel_size=kernel, stride=stride, padding=1),
-            nn.ReLU(),
-            nn.Conv2d(h_dim // 2, h_dim, kernel_size=kernel, stride=stride, padding=1),
-            nn.ReLU(),
-            nn.Conv2d(h_dim, h_dim, kernel_size=kernel-1, stride=stride-1, padding=1),
-            ResidualStack(h_dim, h_dim, res_h_dim, n_res_layers))
+        if compression_factor == 4:
+            self.conv_stack = nn.Sequential(
+                nn.Conv2d(in_dim, h_dim // 2, kernel_size=kernel, stride=stride, padding=1),
+                nn.ReLU(),
+                nn.Conv2d(h_dim // 2, h_dim, kernel_size=kernel, stride=stride, padding=1),
+                nn.ReLU(),
+                nn.Conv2d(h_dim, h_dim, kernel_size=kernel-1, stride=stride-1, padding=1),
+                ResidualStack(h_dim, h_dim, res_h_dim, n_res_layers))
+        if compression_factor == 12:
+            self.conv_stack = nn.Sequential(
+                nn.Conv2d(in_dim, h_dim // 2, kernel_size=kernel, stride=stride, padding=1),
+                nn.ReLU(),
+                nn.Conv2d(h_dim // 2, h_dim, kernel_size=kernel, stride=stride, padding=1),
+                nn.ReLU(),
+                nn.Conv2d(h_dim, h_dim, kernel_size=kernel, stride=stride+1, padding=1),
+                nn.ReLU(),
+                nn.Conv2d(h_dim, h_dim, kernel_size=kernel-1, stride=stride-1, padding=1),
+                ResidualStack(h_dim, h_dim, res_h_dim, n_res_layers))
         '''
         self.spatial_encoder = nn.Sequential(
             nn.Linear(num_joints * 2, hidden_dim),
             nn.ReLU(),
             nn.Linear(hidden_dim, hidden_dim),
-            nn.ReLU()
-        )
-        
+            nn.ReLU())
         self.temporal_encoder = nn.LSTM(hidden_dim, hidden_dim, num_layers=2, batch_first=True)
         '''
     def forward(self, x):
@@ -106,7 +109,6 @@ class  Encoder(nn.Module):
 
 
 
-
 # Kernel size? Stride? Padding?
 # Compression factor?
 class Decoder(nn.Module):
@@ -120,16 +122,28 @@ class Decoder(nn.Module):
     """
     def __init__(self, in_dim, h_dim, n_res_layers, res_h_dim,
                  kernel_size=[], stride=[], padding=[],
-                 compression_factor=8):
+                 compression_factor=12):
         super(Decoder, self).__init__()
+
         kernel = 4
         stride = 2
-        self.inverse_conv_stack = nn.Sequential(
+        if compression_factor == 4:
+            self.inverse_conv_stack = nn.Sequential(
+                    nn.ConvTranspose2d(in_dim, h_dim, kernel_size=kernel-1, stride=stride-1, padding=1),
+                    ResidualStack(h_dim, h_dim, res_h_dim, n_res_layers),
+                    nn.ConvTranspose2d(h_dim, h_dim // 2, kernel_size=kernel, stride=stride, padding=1),
+                    nn.ReLU(),
+                    nn.ConvTranspose2d(h_dim//2, 1, kernel_size=kernel, stride=stride, padding=1))
+        if compression_factor == 12:
+            self.inverse_conv_stack = nn.Sequential(
                 nn.ConvTranspose2d(in_dim, h_dim, kernel_size=kernel-1, stride=stride-1, padding=1),
                 ResidualStack(h_dim, h_dim, res_h_dim, n_res_layers),
+                nn.ConvTranspose2d(h_dim, h_dim, kernel_size=kernel+1, stride=stride+1, padding=1),
+                nn.ReLU(),
                 nn.ConvTranspose2d(h_dim, h_dim // 2, kernel_size=kernel, stride=stride, padding=1),
                 nn.ReLU(),
-                nn.ConvTranspose2d(h_dim//2, 3, kernel_size=kernel, stride=stride, padding=1))
+                nn.ConvTranspose2d(h_dim // 2, h_dim, kernel_size=kernel, stride=stride, padding=1),
+                )
 
     def forward(self, x):
         return self.inverse_conv_stack(x)
@@ -155,7 +169,7 @@ class VectorQuantizer(nn.Module):
         self.embedding = nn.Embedding(self.n_e, self.e_dim)
         self.embedding.weight.data.uniform_(-1/self.n_e, 1/self.n_e)
     
-    def forward(self, x):
+    def forward(self, z): 
         """
         Map encoder output z to a discrete one-hot vector that is the index of the closest embedding e_j
         z (continuous) -> z_q (discrete)
@@ -164,6 +178,8 @@ class VectorQuantizer(nn.Module):
                                2. flatten input to (B*H*W,C)
         """
         # reshape z -> (batch, height, width, channel) and flatten
+        # z:[32, 64, 225, 18] compress factor==4
+        #   [32, 64, 75, 6]   compress factor==12
         z = z.permute(0, 2, 3, 1).contiguous()
         z_flattened = z.view(-1, self.e_dim) # (B*H*W, C=e_dim)
 
@@ -174,7 +190,7 @@ class VectorQuantizer(nn.Module):
         
         # get the closest encoding
         min_encoding_indices = torch.argmin(d, dim=1).unsqueeze(1)
-        min_encodings = torch.zeros(min_encoding_indices.shape[0], self.n_e, device=x.device)
+        min_encodings = torch.zeros(min_encoding_indices.shape[0], self.n_e, device=z.device)
         min_encodings.scatter_(1, min_encoding_indices, 1)
         # get quantized latent vectors
         z_q = torch.matmul(min_encodings, self.embedding.weight).view(z.shape)
@@ -213,7 +229,7 @@ class VQVAE(nn.Module):
     def __init__(self, in_dim, h_dim, n_res_layers, res_h_dim,
                  n_e, e_dim, beta, 
                  kernel_size=[], stride=[], padding=[],
-                 compression_factor=8):
+                 compression_factor=12):
         super(VQVAE, self).__init__()
         self.encoder = Encoder(in_dim, h_dim, n_res_layers, res_h_dim, kernel_size, stride, padding, compression_factor)
         self.pre_quant_conv = nn.Conv2d(h_dim, e_dim, kernel_size=1, stride=1)

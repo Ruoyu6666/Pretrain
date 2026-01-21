@@ -2,7 +2,7 @@ import os
 import time
 import numpy as np
 import argparse
-
+import pickle
 import torch
 from torch.utils.data import DataLoader
 
@@ -24,7 +24,7 @@ def str2bool(v):
 
 
 def save_checkpoint(model, optimizer, epoch, args):
-    SAVE_CHECKPOINT_PATH = args.save_dir + '/checkpoints'
+    SAVE_CHECKPOINT_PATH = args.save_dir + 'checkpoints'
     checkpoint = {
         'model': model.state_dict(),
         'optimizer': optimizer.state_dict(),
@@ -36,7 +36,8 @@ def save_checkpoint(model, optimizer, epoch, args):
 
 
 def save_model(model, optimizer, args):
-    SAVE_MODEL_PATH = args.save_dir + '/models'
+    SAVE_MODEL_PATH = args.save_dir + 'models'
+    os.makedirs(SAVE_MODEL_PATH, exist_ok=True)
     model = {
         'model': model.state_dict(), 
         'optimizer': optimizer.state_dict(),
@@ -56,5 +57,8 @@ def load_checkpoint(model, optimizer, filename, device):
 
 
 def save_results(results, args, timestamp):
-    SAVE_RESULT_PATH = args.save_dir + '/results'
-    torch.save(results, SAVE_RESULT_PATH + '/vqvae_results_' + timestamp + '.pth');
+    SAVE_RESULT_PATH = args.save_dir + 'results'
+    os.makedirs(SAVE_RESULT_PATH, exist_ok=True)
+    # to change
+    with open(SAVE_RESULT_PATH + '/vqvae_results_' + '.pkl', "wb") as f:
+        pickle.dump(results, f)

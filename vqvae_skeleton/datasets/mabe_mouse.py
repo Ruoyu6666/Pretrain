@@ -14,18 +14,19 @@ class MabeMouseDataset(SkeletonDataset):
 
     def __init__(self, 
                  path_to_data_dir, 
-                 sampling_rate = 1, #num_frames = 80, 
-                 sliding_window = 1, if_fill = True,
+                 sampling_rate = 1, 
+                 num_frames = 80, 
+                 sliding_window = 30, 
+                 if_fill = True,
                  patch_size: tuple = (6, 1, 2), 
-                 cache_path = None, cache = True, 
+                 cache_path = None, 
+                 cache = True, 
                  augmentations: transforms.Compose = None, #centeralign: bool = False, 
                  include_testdata: bool = False,
                  **kwargs):
         
-        super().__init__(path_to_data_dir, sampling_rate, #num_frames, 
-                         sliding_window, if_fill, patch_size, 
+        super().__init__(path_to_data_dir, sampling_rate, num_frames, sliding_window, if_fill, patch_size, 
                          cache_path, cache, **kwargs) # calls Baseclass.__init__(self, ....)
-        
         
         self.augmentations = augmentations
         self.include_testdata = include_testdata
@@ -34,7 +35,6 @@ class MabeMouseDataset(SkeletonDataset):
     def load_data(self):
         """Load raw data"""
         self.raw_data = np.load(self.path_to_data_dir, allow_pickle=True).item()
-        self.num_samples = len(self.raw_data)
 
 
     def check_annotations(self) -> None:
@@ -69,7 +69,8 @@ class MabeMouseDataset(SkeletonDataset):
 
         sequences = self.raw_data["sequences"]
         seq_keypoints = []
-        keypoints_ids = [] 
+        keypoints_ids = []
+        sub_seq_length = self.max_keypoints_len
         self.labels = {key: [] for key in self.annotation_names}
         
         for seq_ix, (seq_name, sequence) in enumerate(sequences.items()): #index ,(mouse_name, value)
@@ -82,9 +83,10 @@ class MabeMouseDataset(SkeletonDataset):
             for i in range(len(self.annotation_names)):
                 self.labels[self.annotation_names[i]].append(sequence["annotations"][i])
             
-            keypoints_ids.extend([(seq_ix, i) for i in np.arange(0, len(pad_vec) - sub_seq_length + 1, sliding_window)])
+            keypoints_ids.extend([(seq_ix, i) for i in np.arange(0, len(vec_seq) - sub_seq_length + 1, self.sliding_window)])
         
-        self.seq_keypoints = np.array(seq_keypoints, dtype=np.float32) # (1600, 1800, 3, 12, 2)
+        self.seq_keypoints = np.array(seq_keypoints, dtype=np.float32) # (1600 * 30, 900, 3, 12, 2)
+        self.keypoints_ids = keypoints_ids
         for label_name in self.annotation_names:
             self.labels[label_name] = np.array(self.labels[label_name], dtype=np.float32)
 
@@ -103,27 +105,37 @@ class MabeMouseDataset(SkeletonDataset):
         with open(self.cache_path, "rb") as fp:
             self.seq_keypoints, self.labels = pickle.load(fp)
 
-
-
-    def normalize(self, data): # for one sequence
-        """Scale by dimensions of image and mean-shift to center of image."""
+    def normalize(self, data): # for one sample
+        #Scale by dimensions of image and mean-shift to center of image.
         state_dim = data.shape[1] // 2
         shift = [int(self.DEFAULT_GRID_SIZE / 2), int(self.DEFAULT_GRID_SIZE / 2),] * state_dim
         scale = [int(self.DEFAULT_GRID_SIZE / 2), int(self.DEFAULT_GRID_SIZE / 2),] * state_dim
         return np.divide(data - shift, scale)
-    
-    def featurise_keypoints(self, keypoints): # for one sequence
-        # Option 1: flatten everything
-        keypoints = self.normalize(keypoints)
-        # To do add centeralign part
-        keypoints = torch.tensor(keypoints, dtype=torch.float32)
-        return keypoints
 
-    def prepare_subsequence_sample(self, sequence: np.ndarray): # prepare one sequence for __getitem__
-        """Returns a training sample"""
+    def prepare_subsequence_sample(self, sequence: np.ndarray): # prepare one sample for __getitem__
+        """
+        input sequence :(self.max_keypoints_le, 3, 12, 2)
+        Returns a training sample
+        """
         if self.augmentations:
-            sequence = sequence.reshape(self.max_keypoints_len, *self.KEYFRAME_SHAPE)
             sequence = self.augmentations(sequence)
-            sequence = sequence.reshape(self.max_keypoints_len, -1)
-        feats = self.featurise_keypoints(sequence)
-        feats = feats.reshape(self.max_keypoints_len, -1) # 1800 * 72
+        """Simplest case: Flatten"""
+        sequence = sequence.reshape(self.max_keypoints_len, -1)
+        keypoints = self.normalize(sequence)
+        #if self.centeralign:
+        #    keypoints = keypoints.reshape(self.max_keypoints_len, *self.KEYFRAME_SHAPE)
+        #    keypoints = self.transform_to_centeralign_components(keypoints)
+        keypoints = torch.tensor(keypoints, dtype=torch.float32)
+        feats = torch.unsqueeze(keypoints, 0)
+
+        return feats
+    
+    def __len__(self):
+        return len(self.keypoints_ids)
+    
+    def __getitem__(self, idx: int):
+        subseq_ix = self.keypoints_ids[idx]
+        subsequence = self.seq_keypoints[subseq_ix[0], subseq_ix[1] : subseq_ix[1] + self.max_keypoints_len] # 900, 3, 12, 2
+        feats = self.prepare_subsequence_sample(subsequence)
+        
+        return feats, [] # feats:[1, 900, 72]

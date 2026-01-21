@@ -173,22 +173,15 @@ class BasePoseTrajDataset(Dataset):
         tail_base = self.BODY_PART_2_INDEX["tail_base"]
         neck = self.BODY_PART_2_INDEX["neck"]
         mouse_rotation = np.arctan2(
-            data[:, tail_base, 0] - data[:, neck, 0],
-            data[:, tail_base, 1] - data[:, neck, 1],
+            data[:, tail_base, 0] - data[:, neck, 0], data[:, tail_base, 1] - data[:, neck, 1],
         )
-        R = np.array(
-            [
-                [np.cos(mouse_rotation), -np.sin(mouse_rotation)],
-                [np.sin(mouse_rotation), np.cos(mouse_rotation)],
-            ]
-        ).transpose((2, 0, 1))
+        R = np.array([
+            [np.cos(mouse_rotation), -np.sin(mouse_rotation)],[np.sin(mouse_rotation), np.cos(mouse_rotation)],
+            ]).transpose((2, 0, 1))
         # Encode mouse rotation as sine and cosine
-        mouse_rotation = np.concatenate(
-            [
-                np.sin(mouse_rotation)[:, np.newaxis],
-                np.cos(mouse_rotation)[:, np.newaxis],
-            ], axis=-1,
-        )
+        mouse_rotation = np.concatenate([
+            np.sin(mouse_rotation)[:, np.newaxis], np.cos(mouse_rotation)[:, np.newaxis],
+            ], axis=-1,)
         centered_data = np.matmul(R, centered_data.transpose(0, 2, 1))
         centered_data = centered_data.transpose((0, 2, 1))
         centered_data = centered_data.reshape((-1, 24))
@@ -233,7 +226,7 @@ class BasePoseTrajDataset(Dataset):
             sequence = self.augmentations(sequence)
             sequence = sequence.reshape(self.max_keypoints_len, -1)
         feats = self.featurise_keypoints(sequence)
-        feats = feats.reshape(self.max_keypoints_len, self.NUM_INDIVIDUALS, -1) # flatten for now
+        feats = feats.reshape(self.max_keypoints_len, self.NUM_INDIVIDUALS, -1) # flatten for now(3, 24)
         return feats
 
     # ------------------------------------------------------------

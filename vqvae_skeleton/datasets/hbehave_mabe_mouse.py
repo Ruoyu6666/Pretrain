@@ -21,7 +21,7 @@ class MABeMouseDataset(BasePoseTrajDataset):
     NUM_INDIVIDUALS = 3
     NUM_KEYPOINTS = 12
     KPTS_DIMENSIONS = 2
-    KEYFRAME_SHAPE = (NUM_INDIVIDUALS, NUM_KEYPOINTS, KPTS_DIMENSIONS)
+    KEYFRAME_SHAPE = (NUM_INDIVIDUALS, NUM_KEYPOINTS, KPTS_DIMENSIONS) #3, 12, 2
     DEFAULT_NUM_TRAINING_POINTS = 1600
     DEFAULT_NUM_TESTING_POINTS = 3736
     SAMPLE_LEN = 1800
@@ -41,8 +41,10 @@ class MABeMouseDataset(BasePoseTrajDataset):
     TAIL_TIP = "tail_tip"
 
     STR_BODY_PARTS = [
-        NOSE, EAR_LEFT, EAR_RIGHT, NECK, FOREPAW_LEFT, FOREPAW_RIGHT,
-        CENTER, HINDPAW_LEFT, HINDPAW_RIGHT, TAIL_BASE, TAIL_MIDDLE, TAIL_TIP,
+        NOSE, EAR_LEFT, EAR_RIGHT, 
+        NECK, FOREPAW_LEFT, FOREPAW_RIGHT,
+        CENTER, HINDPAW_LEFT, HINDPAW_RIGHT, 
+        TAIL_BASE, TAIL_MIDDLE, TAIL_TIP,
     ]
     BODY_PART_2_INDEX = {w: i for i, w in enumerate(STR_BODY_PARTS)}
 
@@ -70,7 +72,7 @@ class MABeMouseDataset(BasePoseTrajDataset):
             self.augmentations = None
         """
         self.cache_path = cache_path
-        if not os.path.exists(self.cache_path) or not cache: # no cache file
+        if not os.path.exists(self.cache_path) or not cache:
             self.load_data(include_testdata)
             self.preprocess()
             if cache:
