@@ -41,15 +41,14 @@ from util.pos_embed import interpolate_pos_embed
 
 def get_args_parser():
     parser = argparse.ArgumentParser("hBehaveMAE embeddings extraction", add_help=False)
-    parser.add_argument("--dataset", default="shot7m2", type=str,
-        help="Type of dataset [mabe_mice, shot7m2, hbabel]",)
+    parser.add_argument("--dataset", default="shot7m2", type=str, help="Type of dataset [mabe_mice, shot7m2, hbabel]",)
     parser.add_argument("--joints3d_procrustes", default=True, type=str2bool)
 
-    parser.add_argument("--embedsum", default=False, type=str2bool,
-        help="single embeddings will be summed up instead of concatenated",)
+    parser.add_argument("--embedsum", default=False, type=str2bool, 
+                        help="single embeddings will be summed up instead of concatenated",)
 
-    parser.add_argument("--fast_inference", default=False, type=str2bool,
-        help="if set, we do not perform any embedding averaging, but only take the middle embedding",)
+    parser.add_argument("--fast_inference", default=False, type=str2bool, 
+                        help="if set, we do not perform any embedding averaging, but only take the middle embedding",)
 
     parser.add_argument("--combine_embeddings", default=False, type=str2bool,
         help="combine embeddings from different hierarchical levels and save them",)
@@ -142,6 +141,8 @@ def load_model(args):
     return model, device
 
 
+
+
 def load_fusion_head(args, model):
 
     device = torch.device(args.device)
@@ -150,9 +151,7 @@ def load_fusion_head(args, model):
     curr_mu_size = model.mask_unit_size
     for ix, i in enumerate(model.stage_ends[: model.q_pool]):  # resolution constant after q_pool
         overall_q_strides = list(map(lambda elements: reduce(mul, elements), zip(*model.q_strides)))
-        mask_unit_spatial_shape = [
-            i // s for i, s in zip(model.mask_unit_size, overall_q_strides)
-        ]
+        mask_unit_spatial_shape = [i // s for i, s in zip(model.mask_unit_size, overall_q_strides)]
         kernel = [i // s for i, s in zip(curr_mu_size, mask_unit_spatial_shape)]
         curr_mu_size = [i // s for i, s in zip(curr_mu_size, model.q_strides[ix])]
         multi_scale_fusion_heads.append(
@@ -175,9 +174,7 @@ def load_fusion_head(args, model):
         checkpoint_model = checkpoint["model_state"]
 
     checkpoint_model = {
-        k[25:]: v
-        for k, v in checkpoint_model.items()
-        if k.startswith("multi_scale_fusion_heads")
+        k[25:]: v for k, v in checkpoint_model.items() if k.startswith("multi_scale_fusion_heads")
     }
     # load pre-trained model
     msg = multi_scale_fusion_heads.load_state_dict(checkpoint_model, strict=False)
@@ -191,12 +188,12 @@ def load_fusion_head(args, model):
 
 
 
+
 def extract_hierarchical_embeddings(args):
 
     model, device = load_model(args)
     if args.fusion_head:
         fusion_head = load_fusion_head(args, model)
-
     if args.non_hierarchical:
         args.q_strides = [(1, 1, 1)] * len(args.stages)
         args.out_embed_dims = [args.out_embed_dims[0]] * len(args.stages)
@@ -219,6 +216,7 @@ def extract_hierarchical_embeddings(args):
             nr_test_frames = sum([len(sample) for sample in submission_clips["sequences"].values()])
         num_animals = 1
         max_frame_emb_size = 64
+
     elif args.dataset == "mabe_mice":
         submission_clips = np.load(os.path.join(args.path_to_data_dir, "mouse_triplet_test.npy"), allow_pickle=True,).item()
         normalize = mice.MABeMouseDataset._normalize
@@ -247,25 +245,13 @@ def extract_hierarchical_embeddings(args):
     with open(temp_file.name, "wb") as f:
         for lv in range(len(args.stages)):
             map_path = os.path.join(args.output_dir, f"test_submission_TEMP_{lv}.dat")
-            submissions[lv] = np.memmap(
-                map_path, dtype="float32", mode="w+", shape=(nr_test_frames, shapes[lv])
-            )
+            submissions[lv] = np.memmap(map_path, dtype="float32", mode="w+", shape=(nr_test_frames, shapes[lv]))
         map_path = os.path.join(args.output_dir, f"test_submission_TEMP_combined.dat")
         if args.combine_embeddings:
             if args.fusion_head:
-                submissions["combined"] = np.memmap(
-                    map_path,
-                    dtype="float32",
-                    mode="w+",
-                    shape=(nr_test_frames, shapes[-1]),
-                )
+                submissions["combined"] = np.memmap(map_path, dtype="float32", mode="w+", shape=(nr_test_frames, shapes[-1]),)
             else:
-                submissions["combined"] = np.memmap(
-                    map_path,
-                    dtype="float32",
-                    mode="w+",
-                    shape=(nr_test_frames, sum(shapes)),
-                )
+                submissions["combined"] = np.memmap(map_path, dtype="float32", mode="w+", shape=(nr_test_frames, sum(shapes)),)
 
     sub_seq_length = args.num_frames
     if args.fast_inference and args.num_frames % 2 == 0:
@@ -290,12 +276,11 @@ def extract_hierarchical_embeddings(args):
                 features = hbabel.hBABELDataset.ntu_pre_normalization(features)
                 features = features.transpose(1, 2, 3, 0).squeeze()
             vec_seq = features
-        else:
+        else: # mabe_mouse
             vec_seq = sequence["keypoints"]
 
         if args.fill_holes:
             vec_seq = fill_holes(vec_seq)
-
         vec_seq = vec_seq.reshape(vec_seq.shape[0], -1)
 
         if not (args.dataset == "shot7m2"):
@@ -321,19 +306,15 @@ def extract_hierarchical_embeddings(args):
         pad_vec = np.pad(vec_seq, ((pad, pad), (0, 0)), mode="edge")
 
         # Converts sequence into [number of sub-sequences, frames in sub-sequence, x/y alternating keypoints]
-        data_test = sliding_window_view(pad_vec, window_shape=sub_seq_length, axis=0)[
-            ::sliding_window
-        ].transpose(0, 2, 1)
+        data_test = sliding_window_view(pad_vec, window_shape=sub_seq_length, axis=0)[::sliding_window].transpose(0, 2, 1)
 
         if args.fast_inference:
             if data_test.shape[0] * sliding_window != len(vec_seq):
                 len_diff = len(vec_seq) - (data_test.shape[0] * sliding_window)
                 pad_vec = np.pad(vec_seq, ((pad, pad + sliding_window), (0, 0)), mode="edge")
-                data_test = sliding_window_view(pad_vec, window_shape=sub_seq_length, axis=0
-                                                    )[::sliding_window].transpose(0, 2, 1)
+                data_test = sliding_window_view(pad_vec, window_shape=sub_seq_length, axis=0)[::sliding_window].transpose(0, 2, 1)
             else:
                 len_diff = 0
-
         data_test = data_test.reshape(data_test.shape[0], data_test.shape[1], num_animals, -1)
         data_test = torch.tensor(data_test, dtype=torch.float32)
 
@@ -444,9 +425,7 @@ def extract_hierarchical_embeddings(args):
                 ev = sum(pca.explained_variance_ratio_)
             else:
                 batch_size = 320000
-                ipca = IncrementalPCA(
-                    n_components=max_frame_emb_size, batch_size=batch_size
-                )
+                ipca = IncrementalPCA(n_components=max_frame_emb_size, batch_size=batch_size)
                 for i in tqdm(range(0, len(embs), batch_size)):
                     ipca.partial_fit(embs[i : i + batch_size])
                 ev = sum(ipca.explained_variance_ratio_)

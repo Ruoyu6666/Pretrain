@@ -22,6 +22,22 @@ def str2bool(v):
         raise argparse.ArgumentTypeError("Boolean value expected.")
 
 
+def make_dirs(save_dir):
+    existing_versions = os.listdir(save_dir)
+        
+    if len(existing_versions) > 0:
+        max_version = int(existing_versions[0].split("_")[-1])
+        for v in existing_versions:
+            ver = int(v.split("_")[-1])
+            if ver > max_version:
+                    max_version = ver
+        version = int(max_version) + 1
+    else:
+        version = 0
+    # os.makedirs(directory, exist_ok=True)
+    return f"{save_dir}/exp_{version}"
+
+
 
 def save_checkpoint(model, optimizer, epoch, args):
     SAVE_CHECKPOINT_PATH = args.save_dir + 'checkpoints'
@@ -31,7 +47,7 @@ def save_checkpoint(model, optimizer, epoch, args):
         'epoch': epoch,
         'args': args
     }
-    torch.save(checkpoint, SAVE_CHECKPOINT_PATH + '/vqvae_checkpoint_epoch_' + str(epoch) + '.pth')
+    torch.save(checkpoint, SAVE_CHECKPOINT_PATH + '/vqvae_checkpoint.pth')
 
 
 

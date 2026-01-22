@@ -10,7 +10,9 @@ from torchvision import transforms
 
 
 class MabeMouseDataset(SkeletonDataset):
+    
     DEFAULT_GRID_SIZE = 850
+    SAMPLE_LEN = 1800
 
     def __init__(self, 
                  path_to_data_dir, 
@@ -79,6 +81,7 @@ class MabeMouseDataset(SkeletonDataset):
                 vec_seq = self.fill_holes(vec_seq) # 1800, 3, 12, 2
             if self.sampling_rate > 1:
                 vec_seq = vec_seq[:: self.sampling_rate]
+            
             seq_keypoints.append(vec_seq)
             for i in range(len(self.annotation_names)):
                 self.labels[self.annotation_names[i]].append(sequence["annotations"][i])
@@ -104,32 +107,30 @@ class MabeMouseDataset(SkeletonDataset):
                          "Delete this file or set cache=False if processing changed.")
         with open(self.cache_path, "rb") as fp:
             self.seq_keypoints, self.labels = pickle.load(fp)
+   
 
-    def normalize(self, data): # for one sample
-        #Scale by dimensions of image and mean-shift to center of image.
+    @staticmethod
+    def normalize(data, grid_size):
+        """Scale by dimensions of image and mean-shift to center of image."""
         state_dim = data.shape[1] // 2
-        shift = [int(self.DEFAULT_GRID_SIZE / 2), int(self.DEFAULT_GRID_SIZE / 2),] * state_dim
-        scale = [int(self.DEFAULT_GRID_SIZE / 2), int(self.DEFAULT_GRID_SIZE / 2),] * state_dim
+        shift = [int(grid_size / 2), int(grid_size / 2)] * state_dim
+        scale = [int(grid_size / 2), int(grid_size / 2)] * state_dim
         return np.divide(data - shift, scale)
 
+    """
     def prepare_subsequence_sample(self, sequence: np.ndarray): # prepare one sample for __getitem__
-        """
-        input sequence :(self.max_keypoints_le, 3, 12, 2)
-        Returns a training sample
-        """
+        # input sequence :(self.max_keypoints_length, 3, 12, 2)
         if self.augmentations:
             sequence = self.augmentations(sequence)
-        """Simplest case: Flatten"""
-        sequence = sequence.reshape(self.max_keypoints_len, -1)
-        keypoints = self.normalize(sequence)
+        sequence = sequence.reshape(self.max_keypoints_len, -1) # simply flatten
+        keypoints = self.normalize(sequence, self.DEFAULT_GRID_SIZE)
         #if self.centeralign:
         #    keypoints = keypoints.reshape(self.max_keypoints_len, *self.KEYFRAME_SHAPE)
         #    keypoints = self.transform_to_centeralign_components(keypoints)
         keypoints = torch.tensor(keypoints, dtype=torch.float32)
         feats = torch.unsqueeze(keypoints, 0)
-
         return feats
-    
+
     def __len__(self):
         return len(self.keypoints_ids)
     
@@ -137,5 +138,21 @@ class MabeMouseDataset(SkeletonDataset):
         subseq_ix = self.keypoints_ids[idx]
         subsequence = self.seq_keypoints[subseq_ix[0], subseq_ix[1] : subseq_ix[1] + self.max_keypoints_len] # 900, 3, 12, 2
         feats = self.prepare_subsequence_sample(subsequence)
+    """
+    
+
+    def prepare_sequence_sample(self, sequence: np.ndarray):
+        feats = torch.tensor(self.normalize(sequence, self.DEFAULT_GRID_SIZE), dtype=torch.float32) # (1800, 3, 12, 2)
+        feats = feats.reshape(self.SAMPLE_LEN, -1)
+        feats = torch.unsqueeze(feats, 0)
+        return feats
+    
+    def __len__(self):
+        return len(self.seq_keypoints) # whole sequence
+    
+    def __getitem__(self, idx: int):
+
+        sequence = self.seq_keypoints[idx] # (1800, 3, 12, 2)
+        feats = self.prepare_sequence_sample(sequence)
         
-        return feats, [] # feats:[1, 900, 72]
+        return feats, []

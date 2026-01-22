@@ -17,12 +17,10 @@ from datasets.mabe_mouse import MabeMouseDataset
 def get_args_parser():
 
     parser = argparse.ArgumentParser("VQ-VAE Training", add_help=False)
-
-    parser.add_argument( "--job", default="train", const="train", nargs="?", choices=["train", "compute_representations"], help="select task",)
     
     """Model Hyperparameters"""
     parser.add_argument("--batch_size", type=int, default=32)
-    parser.add_argument("--n_updates", type=int, default=50000)
+    parser.add_argument("--n_updates", type=int, default=50)
     parser.add_argument("--n_hiddens", type=int, default=128)         # h_dim
     parser.add_argument("--n_residual_hiddens", type=int, default=32) # res_h_dim
     parser.add_argument("--n_residual_layers", type=int, default=2)   # n_res_layers
@@ -42,6 +40,7 @@ def get_args_parser():
     parser.add_argument("--patch_size", default=(3,1,24), type = int )
     parser.add_argument("--cache_path", type=str, default='./data/tmp/mabe_mouse_train.pkl')
     parser.add_argument("--cache", default=False, type=str2bool) # if true cache processed data or load from cache
+    parser.add_argument("--compression_factor", type=int, default=24)
 
     """Data augmentation and preprocessing"""
     parser.add_argument("--data_augment", default=False, type=str2bool)
@@ -53,7 +52,6 @@ def get_args_parser():
 
     """Saving and logging"""
     parser.add_argument("--save_dir", type=str, default="./outputs/") #  models, results, checkpoints
-    parser.add_argument("--filename",  type=str, default=timestamp)
     parser.add_argument("--ckpt_path", type=str, default="./outputs/models/vqvae_model.pth")
 
     return parser.parse_args()
@@ -73,13 +71,13 @@ def train_vqvae(model, loader_train, optimizer, device, writer, timestamp, args)
     num_epochs = int(args.n_updates / len(loader_train) + 0.5)
     print('Number of epochs to train:', num_epochs)
 
-    results = {'recon_errors': 0, 'total_loss': 0,'perplexities': 0}
     best_loss = float('inf')
 
     for epoch in tqdm(range(1, num_epochs + 1)):
         model.train()
-        #for i, (x, _)  in enumerate(tqdm(loader_train, total=len(loader_train))):
-        for i, (x, _) in enumerate(tqdm(islice(loader_train, 100), total=100)): # len(loader_train): 45050
+        results = {'recon_errors': 0, 'total_loss': 0,'perplexities': 0}
+        for i, (x, _)  in enumerate(tqdm(loader_train, total=len(loader_train))):
+        #for i, (x, _) in enumerate(tqdm(islice(loader_train, 100), total=100)): # len(loader_train): 45050
             x = x.to(device) # [B, 3, 32, 32] for CIFAR10
             optimizer.zero_grad()
 
@@ -95,7 +93,6 @@ def train_vqvae(model, loader_train, optimizer, device, writer, timestamp, args)
             
         """
         if i % args.log_interval == 0:
-            # save model and print value
             if args.save:
                 hyperparameters = args.__dict__.save_model_and_results(model, results, hyperparameters, args.filename)
             #writer.add_scalar('Train/Recon_Loss', recon_loss.item(), step)
@@ -120,39 +117,6 @@ def train_vqvae(model, loader_train, optimizer, device, writer, timestamp, args)
     save_results(results, args, timestamp)
 
 
-# To Check 
-def compute_representations(model, loader, device ,args):
-
-    os.makedirs(args.save_dir + '/representations', exist_ok=True)
-    model = model.to(device)
-    model.eval()
-    all_representations = []
-    all_encoding =  []
-    all_encoding_indices = []
-
-    with torch.no_grad():
-        for i, (x, _)  in enumerate(loader):
-            x = x.to(device)
-            z = model.encoder(x)
-            z = model.pre_quant_conv(z)
-            vq_loss, x_recon, perplexity, min_encodings, min_encodings_indices = model.vq_layer(z)
-
-            all_representations.append(x_recon.cpu().numpy())
-            all_encoding.append(min_encodings.cpu().numpy())
-            all_encoding_indices.append(min_encodings_indices.cpu().numpy())
-
-    all_representations = np.concatenate(all_representations, axis=0)
-    all_encoding = np.concatenate(all_encoding, axis=0)
-    all_encoding_indices = np.concatenate(all_encoding_indices, axis=0)
-
-    np.save(args.save_dir + '/representations/vqvae_representations.npy', all_representations)
-    #np.save(args.save_dir + '/representations/vqvae_encodings.npy', all_encoding)
-    np.save(args.save_dir + '/representations/vqvae_encoding_indices.npy', all_encoding_indices)
-    codebook = model.vq_layer.embedding.weight.cpu().numpy()
-    np.save(args.save_dir + '/representations/vqvae_codebook.npy', codebook)
-
-    return all_representations
-
 
 
 
@@ -167,9 +131,7 @@ if __name__ == "__main__":
     Set up VQ-VAE model with components defined in ./models/ folder
     """
     model = VQVAE(1, args.n_hiddens, args.n_residual_layers,  args.n_residual_hiddens,
-                  args.n_embeddings, args.embedding_dim, args.beta).to(device)
-    if args.job == "compute_representations":
-        model.load_state_dict(torch.load(args.ckpt_path, map_location=device, weights_only=False))
+                  args.n_embeddings, args.embedding_dim, args.beta, compression_factor =args.compression_factor).to(device)
 
 
     """
@@ -185,17 +147,7 @@ if __name__ == "__main__":
                                      cache_path=args.cache_path, cache=args.cache,
                                      augmentations=args.data_augment, #centeralign=args.centeralign,
                                      include_testdata=args.include_test_data,)
-    """
-    dataset_test = MABeMouseDataset(path_to_data_dir=args.path_to_data_dir,
-                                    sampling_rate=args.sampling_rate,
-                                    num_frames=args.num_frames, 
-                                    sliding_window=args.sliding_window,
-                                    if_fill=args.if_fill_holes,
-                                    patch_size=args.patch_size,
-                                    cache_path=args.cache_path, cache=args.cache,
-                                    augmentations=None,)
-
-    """
+    
     loader_train = DataLoader(dataset_train, #sampler=sampler_train,
                              batch_size=args.batch_size, num_workers=args.num_workers,
                              pin_memory=args.pin_mem, drop_last=True,)
@@ -207,7 +159,5 @@ if __name__ == "__main__":
     Set up optimizer and training loop
     """
     optimizer = optim.Adam(model.parameters(), lr=args.learning_rate, amsgrad=True)
-    if args.job == "train":
-        train_vqvae(model, loader_train, optimizer, device, None, timestamp, args)
-    elif args.job == "compute_representations":
-        compute_representations(model, loader_train, device, args)
+    train_vqvae(model, loader_train, optimizer, device, None, timestamp, args)
+

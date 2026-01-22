@@ -53,7 +53,7 @@ class SkeletonDataset(Dataset, ABC):
         pass
     
     @abstractmethod
-    def prepare_subsequence_sample(self):
+    def prepare_sequence_sample(self):
         pass
 
     @abstractmethod

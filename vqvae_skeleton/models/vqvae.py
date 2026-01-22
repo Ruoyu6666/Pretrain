@@ -87,6 +87,14 @@ class Encoder(nn.Module):
                 nn.ReLU(),
                 nn.Conv2d(h_dim, h_dim, kernel_size=kernel-1, stride=stride-1, padding=1),
                 ResidualStack(h_dim, h_dim, res_h_dim, n_res_layers))
+        if compression_factor == 24:
+            self.conv_stack = nn.Sequential(
+                nn.Conv2d(in_dim, h_dim // 2, kernel_size=(3, 2), stride=(3, 2)),
+                nn.ReLU(),
+                nn.Conv2d(h_dim // 2, h_dim, kernel_size=(1, 3), stride=(1, 3)),
+                nn.ReLU(),
+                nn.Conv2d(h_dim, h_dim, kernel_size=(1, 4), stride=(1, 4)),
+                ResidualStack(h_dim, h_dim, res_h_dim, n_res_layers))
         '''
         self.spatial_encoder = nn.Sequential(
             nn.Linear(num_joints * 2, hidden_dim),
@@ -134,6 +142,7 @@ class Decoder(nn.Module):
                     nn.ConvTranspose2d(h_dim, h_dim // 2, kernel_size=kernel, stride=stride, padding=1),
                     nn.ReLU(),
                     nn.ConvTranspose2d(h_dim//2, 1, kernel_size=kernel, stride=stride, padding=1))
+            
         if compression_factor == 12:
             self.inverse_conv_stack = nn.Sequential(
                 nn.ConvTranspose2d(in_dim, h_dim, kernel_size=kernel-1, stride=stride-1, padding=1),
@@ -142,8 +151,16 @@ class Decoder(nn.Module):
                 nn.ReLU(),
                 nn.ConvTranspose2d(h_dim, h_dim // 2, kernel_size=kernel, stride=stride, padding=1),
                 nn.ReLU(),
-                nn.ConvTranspose2d(h_dim // 2, h_dim, kernel_size=kernel, stride=stride, padding=1),
-                )
+                nn.ConvTranspose2d(h_dim // 2, h_dim, kernel_size=kernel, stride=stride, padding=1),)
+        
+        if compression_factor == 24:
+            self.inverse_conv_stack = nn.Sequential(
+                nn.ConvTranspose2d(in_dim, h_dim, kernel_size=(3, 2), stride=(3, 2)),
+                ResidualStack(h_dim, h_dim, res_h_dim, n_res_layers),
+                nn.ConvTranspose2d(h_dim, h_dim // 2, kernel_size=(1, 3), stride=(1, 3)),
+                nn.ReLU(),
+                nn.ConvTranspose2d(h_dim // 2, h_dim, kernel_size=(1, 4), stride=(1, 4)),
+                ResidualStack(h_dim, h_dim, res_h_dim, n_res_layers))
 
     def forward(self, x):
         return self.inverse_conv_stack(x)
@@ -178,11 +195,9 @@ class VectorQuantizer(nn.Module):
                                2. flatten input to (B*H*W,C)
         """
         # reshape z -> (batch, height, width, channel) and flatten
-        # z:[32, 64, 225, 18] compress factor==4
-        #   [32, 64, 75, 6]   compress factor==12
+        # z:[32, 450, 18, 64] compress factor==4
         z = z.permute(0, 2, 3, 1).contiguous()
-        z_flattened = z.view(-1, self.e_dim) # (B*H*W, C=e_dim)
-
+        z_flattened = z.view(-1, self.e_dim) # (B*H*W, C=e_dim) [32 * 8100, 64]
         # distances from z to embeddings e_j (z - e)^2 = z^2 + e^2 - 2 e * z
         d = torch.sum(z_flattened**2, dim=1, keepdim=True) + \
             torch.sum(self.embedding.weight**2, dim=1) - \
@@ -204,6 +219,8 @@ class VectorQuantizer(nn.Module):
         perplexity = torch.exp(-torch.sum(e_mean * torch.log(e_mean + 1e-10)))
         # reshape back to match original input shape
         z_q = z_q.permute(0, 3, 1, 2).contiguous()
+        print(z_q.shape)
+        print(min_encoding_indices.shape)
 
         return loss, z_q, perplexity, min_encodings, min_encoding_indices#, self.embedding.weight,
 
@@ -229,7 +246,7 @@ class VQVAE(nn.Module):
     def __init__(self, in_dim, h_dim, n_res_layers, res_h_dim,
                  n_e, e_dim, beta, 
                  kernel_size=[], stride=[], padding=[],
-                 compression_factor=12):
+                 compression_factor=4):
         super(VQVAE, self).__init__()
         self.encoder = Encoder(in_dim, h_dim, n_res_layers, res_h_dim, kernel_size, stride, padding, compression_factor)
         self.pre_quant_conv = nn.Conv2d(h_dim, e_dim, kernel_size=1, stride=1)
@@ -241,4 +258,5 @@ class VQVAE(nn.Module):
         z = self.pre_quant_conv(z)
         vq_loss, z_q, perplexity, min_encodings, min_encoding_indices = self.vq_layer(z)
         x_recon = self.decoder(z_q)
+
         return vq_loss, x_recon, perplexity, min_encodings, min_encoding_indices
